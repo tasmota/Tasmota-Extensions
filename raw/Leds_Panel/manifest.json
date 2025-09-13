@@ -1,8 +1,7 @@
 {
   "name": "Leds Panel",
-  "version": "0x07E90901",
+  "version": "0x19090100",
   "description": "Realtime display of the WS2812 leds in browser",
   "author": "Stephan Hadinger",
-  "min_tasmota": "0x0E060001",
-  "features": ""
+  "min_tasmota": "0x0E060001"
 }
