@@ -1,3 +1,3 @@
-{"name":"Leds Panel","file":"Leds_Panel.tapp","version":"0x07E90901","description":"Realtime display of the WS2812 leds in browser","author":"Stephan Hadinger"}
-{"name":"Partition Wizard","file":"Partition_Wizard.tapp","version":"0x07E90901","description":"Wizard for resizing partitions and converting to safeboot layout","author":"Stephan Hadinger"}
-{"name":"Wifi Memory Sticker","file":"Wifi_Memory_Sticker.tapp","version":"0x07E90901","description":"Display top left sticker with Wifi strength and memory heap.","author":"Stephan Hadinger"}
+{"name":"Leds Panel","file":"Leds_Panel.tapp","version":"0x19090100","description":"Realtime display of the WS2812 leds in browser","author":"Stephan Hadinger"}
+{"name":"Partition Wizard","file":"Partition_Wizard.tapp","version":"0x19090100","description":"Wizard for resizing partitions and converting to safeboot layout","author":"Stephan Hadinger"}
+{"name":"Wifi Memory Sticker","file":"Wifi_Memory_Sticker.tapp","version":"0x19090100","description":"Display top left sticker with Wifi strength and memory heap","author":"Stephan Hadinger"}
