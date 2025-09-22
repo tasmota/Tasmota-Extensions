@@ -19,51 +19,48 @@ jobs:
         with:
           python-version: '3.11'
       
-      - name: Backup existing files for comparison
-        run: |
-          mkdir -p /tmp/backup
-          if [ -d "extensions/tapp" ]; then
-            cp -r extensions/tapp/* /tmp/backup/ 2>/dev/null || true
-          fi
-          if [ -f "extensions/extensions.jsonl" ]; then
-            cp extensions/extensions.jsonl /tmp/backup/ 2>/dev/null || true
-          fi
-      
       - name: Run gen.py to build extensions
         run: |
           python3 gen.py
       
-      - name: Restore unchanged files
-        run: |
-          # Compare and restore files that haven't changed
-          if [ -d "/tmp/backup" ]; then
-            for file in /tmp/backup/*; do
-              if [ -f "$file" ]; then
-                filename=$(basename "$file")
-                if [ "$filename" = "extensions.jsonl" ]; then
-                  target="extensions/extensions.jsonl"
-                else
-                  target="extensions/tapp/$filename"
-                fi
-                
-                if [ -f "$target" ] && cmp -s "$file" "$target"; then
-                  echo "File $filename unchanged, restoring original"
-                  cp "$file" "$target"
-                fi
-              fi
-            done
-          fi
-      
-      - name: Commit generated files
+      - name: Check for actual changes and commit
         run: |
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git config user.name "github-actions[bot]"
-          git add extensions/tapp/ extensions/extensions.jsonl
-          if git diff --staged --quiet; then
-            echo "No changes to commit"
+          
+          # Check what files have actually changed
+          changed_files=""
+          
+          # Check extensions.jsonl
+          if git diff --quiet extensions/extensions.jsonl 2>/dev/null; then
+            echo "extensions.jsonl unchanged"
+          else
+            echo "extensions.jsonl changed"
+            git add extensions/extensions.jsonl
+            changed_files="$changed_files extensions/extensions.jsonl"
+          fi
+          
+          # Check each .tapp file individually
+          for tapp_file in extensions/tapp/*.tapp; do
+            if [ -f "$tapp_file" ]; then
+              if git diff --quiet "$tapp_file" 2>/dev/null; then
+                echo "$(basename $tapp_file) unchanged"
+              else
+                echo "$(basename $tapp_file) changed"
+                git add "$tapp_file"
+                changed_files="$changed_files $tapp_file"
+              fi
+            fi
+          done
+          
+          # Only commit if there are actual changes
+          if [ -n "$changed_files" ]; then
+            echo "Committing changed files:$changed_files"
+            git commit -m "Auto-build extensions from raw/ changes - ${GITHUB_SHA}"
+          else
+            echo "No files changed, skipping commit"
             exit 0
           fi
-          git commit -m "Auto-build extensions from raw/ changes - ${GITHUB_SHA}"
       
       - name: Push changes to repository
         uses: ad-m/github-push-action@master
