@@ -19,9 +19,40 @@ jobs:
         with:
           python-version: '3.11'
       
+      - name: Backup existing files for comparison
+        run: |
+          mkdir -p /tmp/backup
+          if [ -d "extensions/tapp" ]; then
+            cp -r extensions/tapp/* /tmp/backup/ 2>/dev/null || true
+          fi
+          if [ -f "extensions/extensions.jsonl" ]; then
+            cp extensions/extensions.jsonl /tmp/backup/ 2>/dev/null || true
+          fi
+      
       - name: Run gen.py to build extensions
         run: |
           python3 gen.py
+      
+      - name: Restore unchanged files
+        run: |
+          # Compare and restore files that haven't changed
+          if [ -d "/tmp/backup" ]; then
+            for file in /tmp/backup/*; do
+              if [ -f "$file" ]; then
+                filename=$(basename "$file")
+                if [ "$filename" = "extensions.jsonl" ]; then
+                  target="extensions/extensions.jsonl"
+                else
+                  target="extensions/tapp/$filename"
+                fi
+                
+                if [ -f "$target" ] && cmp -s "$file" "$target"; then
+                  echo "File $filename unchanged, restoring original"
+                  cp "$file" "$target"
+                fi
+              fi
+            done
+          fi
       
       - name: Commit generated files
         run: |
