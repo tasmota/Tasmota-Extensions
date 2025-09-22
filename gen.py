@@ -64,10 +64,16 @@ def create_tapp_file(source_dir: Path, output_dir: Path) -> Optional[str]:
     try:
         with zipfile.ZipFile(tapp_path, 'w', zipfile.ZIP_STORED) as zf:
             # Add all files from source directory with flat structure (-j flag equivalent)
-            for file_path in source_dir.iterdir():
+            for file_path in sorted(source_dir.iterdir()):  # Sort for consistent order
                 if file_path.is_file():
-                    # Add file with just its name (flat structure)
-                    zf.write(file_path, file_path.name)
+                    # Create ZipInfo with consistent timestamp (Unix epoch)
+                    zip_info = zipfile.ZipInfo(filename=file_path.name)
+                    zip_info.date_time = (2025, 9, 1, 0, 0, 0)  # Consistent timestamp
+                    zip_info.compress_type = zipfile.ZIP_STORED
+                    
+                    # Read file content and add to zip
+                    with open(file_path, 'rb') as f:
+                        zf.writestr(zip_info, f.read())
                     print(f"  Added: {file_path.name}")
         
         print(f"Created: {tapp_path}")
