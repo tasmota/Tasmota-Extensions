@@ -27,8 +27,12 @@ jobs:
         run: |
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git config user.name "github-actions[bot]"
-          git add extensions/tapp/*.tapp extensions/extensions.jsonl
-          git commit -m "Auto-build extensions from raw/ changes - ${GITHUB_SHA}" || exit 0
+          git add extensions/tapp/ extensions/extensions.jsonl
+          if git diff --staged --quiet; then
+            echo "No changes to commit"
+            exit 0
+          fi
+          git commit -m "Auto-build extensions from raw/ changes - ${GITHUB_SHA}"
       
       - name: Push changes to repository
         uses: ad-m/github-push-action@master
