@@ -19,6 +19,20 @@ jobs:
         with:
           python-version: '3.11'
       
+      - name: Store checksums of existing files
+        run: |
+          mkdir -p /tmp/checksums
+          if [ -d "extensions/tapp" ]; then
+            for file in extensions/tapp/*.tapp; do
+              if [ -f "$file" ]; then
+                sha256sum "$file" > "/tmp/checksums/$(basename "$file").sha256"
+              fi
+            done
+          fi
+          if [ -f "extensions/extensions.jsonl" ]; then
+            sha256sum "extensions/extensions.jsonl" > "/tmp/checksums/extensions.jsonl.sha256"
+          fi
+      
       - name: Run gen.py to build extensions
         run: |
           python3 gen.py
@@ -28,25 +42,41 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git config user.name "github-actions[bot]"
           
-          # Check what files have actually changed
           changed_files=""
           
           # Check extensions.jsonl
-          if git diff --quiet extensions/extensions.jsonl 2>/dev/null; then
-            echo "extensions.jsonl unchanged"
-          else
-            echo "extensions.jsonl changed"
+          if [ -f "/tmp/checksums/extensions.jsonl.sha256" ] && [ -f "extensions/extensions.jsonl" ]; then
+            old_checksum=$(cat /tmp/checksums/extensions.jsonl.sha256 | cut -d' ' -f1)
+            new_checksum=$(sha256sum extensions/extensions.jsonl | cut -d' ' -f1)
+            if [ "$old_checksum" = "$new_checksum" ]; then
+              echo "extensions.jsonl unchanged"
+            else
+              echo "extensions.jsonl changed"
+              git add extensions/extensions.jsonl
+              changed_files="$changed_files extensions/extensions.jsonl"
+            fi
+          elif [ -f "extensions/extensions.jsonl" ]; then
+            echo "extensions.jsonl is new"
             git add extensions/extensions.jsonl
             changed_files="$changed_files extensions/extensions.jsonl"
           fi
           
-          # Check each .tapp file individually
+          # Check each .tapp file
           for tapp_file in extensions/tapp/*.tapp; do
             if [ -f "$tapp_file" ]; then
-              if git diff --quiet "$tapp_file" 2>/dev/null; then
-                echo "$(basename $tapp_file) unchanged"
+              filename=$(basename "$tapp_file")
+              if [ -f "/tmp/checksums/$filename.sha256" ]; then
+                old_checksum=$(cat "/tmp/checksums/$filename.sha256" | cut -d' ' -f1)
+                new_checksum=$(sha256sum "$tapp_file" | cut -d' ' -f1)
+                if [ "$old_checksum" = "$new_checksum" ]; then
+                  echo "$filename unchanged"
+                else
+                  echo "$filename changed"
+                  git add "$tapp_file"
+                  changed_files="$changed_files $tapp_file"
+                fi
               else
-                echo "$(basename $tapp_file) changed"
+                echo "$filename is new"
                 git add "$tapp_file"
                 changed_files="$changed_files $tapp_file"
               fi
