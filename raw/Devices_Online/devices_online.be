@@ -27,7 +27,9 @@ class devices_online
   static var line_highlight_color = "yellow"        # Latest change highlight HTML color like "#FFFF00" or "yellow"
   static var line_lowuptime_color = "lime"          # Low uptime highlight HTML color like "#00FF00" or "lime"
 
-  var mqtt_tele                                     # MQTT tele STATE subscribe format
+  var mqtt_state                                    # MQTT tele STATE subscribe format
+  var mqtt_topic_idx                                # Index of %topic% within full topic
+  var mqtt_step                                     # MQTT message state
   var bool_devicename                               # Show device name
   var bool_version                                  # Show version
   var bool_ipaddress                                # Show IP address
@@ -60,13 +62,38 @@ class devices_online
     self.list_buffer = []                           # Init line buffer list
     self.list_config = []                           # Init retained config buffer list
 
-#    var full_topic = tasmota.cmd("FullTopic", true)['FullTopic'] # "%prefix%/%topic%/"
-    var prefix_tele = tasmota.cmd("Prefix", true)['Prefix3'] # tele = Prefix3 used by STATE message
-    self.mqtt_tele = format("%s/#", prefix_tele)
-    mqtt.subscribe(self.mqtt_tele, /topic, idx, data, databytes -> self.handle_state_data(topic, idx, data, databytes))
-    mqtt.subscribe("tasmota/discovery/+/config", /topic, idx, data, databytes -> self.handle_discovery_data(topic, idx, data, databytes))
+    var parts = string.split(tasmota.cmd('_FullTopic', true)['FullTopic'], '/')
+    var prefix3 = tasmota.cmd("Prefix", true)['Prefix3'] # tele = Prefix3 used by STATE message
+    self.mqtt_topic_idx = -1
+    for ix : 0..size(parts)-1
+      var level = parts[ix]
+      if level == '%prefix%' 
+        parts[ix] = prefix3
+      elif level == '%topic%'
+        parts[ix] = '+'
+        self.mqtt_topic_idx = ix
+      elif level == ''
+        parts[ix] = 'STATE'
+      else
+        parts[ix] = '+'
+      end
+    end
+    self.mqtt_state = parts.concat('/')             # default = tele/+/STATE
+
+    if self.mqtt_topic_idx == -1
+      log("DVO: ERROR No %topic% in FullTopic defined", 1)
+      return
+    end
 
     tasmota.add_driver(self)
+
+    mqtt.subscribe(self.mqtt_state, /topic, idx, data, databytes -> self.handle_state_data(topic, idx, data, databytes))
+    mqtt.subscribe("tasmota/discovery/+/config", /topic, idx, data, databytes -> self.handle_discovery_data(topic, idx, data, databytes))
+
+    self.mqtt_step = 0
+    if !mqtt.connected()
+      log("DVO: Need MQTT connected", 1)
+    end
   end
 
   #################################################################################
@@ -76,7 +103,7 @@ class devices_online
   #################################################################################
   def unload()
     mqtt.unsubscribe("tasmota/discovery/+/config")
-    mqtt.unsubscribe(self.mqtt_tele)
+    mqtt.unsubscribe(self.mqtt_state)
     tasmota.remove_driver(self)
   end
 
@@ -86,6 +113,11 @@ class devices_online
   # Handle MQTT Tasmota Discovery Config data
   #################################################################################
   def handle_discovery_data(discovery_topic, idx, data, databytes)
+    if self.mqtt_step == 0
+      log("DVO: Discovery started...", 3)
+      self.mqtt_step = 1
+    end
+#    log(f"DVO: Discovery topic '{discovery_topic}'", 4)
     var config = json.load(data)
     if config
       # tasmota/discovery/142B2F9FAF38/config = {"ip":"192.168.2.208","dn":"AtomLite2","fn":["Tasmota",null,null,null,null,null,null,null],"hn":"atomlite2","mac":"142B2F9FAF38","md":"M5Stack Atom Lite","ty":0,"if":0,"cam":0,"ofln":"Offline","onln":"Online","state":["OFF","ON","TOGGLE","HOLD"],"sw":"15.0.1.4","t":"atomlite2","ft":"%prefix%/%topic%/","tp":["cmnd","stat","tele"],"rl":[2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],"swc":[-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1],"swn":[null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null],"btn":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],"so":{"4":0,"11":0,"13":0,"17":0,"20":0,"30":0,"68":0,"73":0,"82":0,"114":0,"117":0},"lk":1,"lt_st":3,"bat":0,"dslp":0,"sho":[],"sht":[],"ver":1} (retained)
@@ -94,14 +126,12 @@ class devices_online
       var ipaddress = config['ip']
       var devicename = config['dn']
       var version = config['sw']
-      var line = format("%s\001%s\001%s\001%s\001%s", topic, hostname, ipaddress, devicename, version)
-#      tasmota.log(format("STD: 111 Size %03d, Topic '%s', Line '%s'", self.list_config.size(), topic, line), 3)
+      var line = [topic, hostname, ipaddress, devicename, version]
       if self.list_config.size()
         var list_index = 0
         var list_size = size(self.list_config)
-        var topic_delim = format("%s\001", topic)   # Add find delimiter
         while list_index < list_size                # Use while loop as counter is decremented
-          if 0 == string.find(self.list_config[list_index], topic_delim)
+          if self.list_config[list_index][0] == topic
             self.list_config.remove(list_index)     # Remove current config
             list_size -= 1                          # Continue for duplicates
           end
@@ -109,7 +139,6 @@ class devices_online
         end
       end
       self.list_config.push(line)                   # Add (re-discovered) config as last entry
-#      tasmota.log(format("STD: 222 Size %03d, Topic '%s', Line '%s'", self.list_config.size(), topic, line), 3)
     end
     return true                                     # return true to stop propagation as a Tasmota cmd
   end
@@ -120,43 +149,55 @@ class devices_online
   # Handle MQTT STATE data
   #################################################################################
   def handle_state_data(tele_topic, idx, data, databytes)
+    if self.mqtt_step == 1 
+      log("DVO: Discovery complete", 3)
+      self.mqtt_step = 2
+    end
+#    log(f"DVO: STATE topic '{tele_topic}'", 4)
     var subtopic = string.split(tele_topic, "/")
-    if subtopic[-1] == "STATE"                      # tele/atomlite2/STATE
-      var topic = subtopic[1]                       # Assume default Fulltopic (%prefix%/%topic%/) = tele/atomlite2/STATE = atomlite2
-
+    if subtopic[-1] == "STATE"                      # we are only serving topic ending in STATE
+      var topic = subtopic[self.mqtt_topic_idx]
       var topic_index = -1
       for i: self.list_config.keys()
-        if 0 == string.find(self.list_config[i], topic)
+        if self.list_config[i][0] == topic
           topic_index = i
           break
         end
       end
-#      tasmota.log(format("STD: Topic '%s', Index %d, Size %d, Line '%s'", topic, topic_index, self.list_config.size(), self.list_config[topic_index]), 3)
+#      log(format("DVO: Topic '%s', Index %d, Size %d, Line '%s'", topic, topic_index, self.list_config.size(), self.list_config[topic_index]), 3)
       if topic_index == -1 return true end          # return true to stop propagation as a Tasmota cmd
 
       var state = json.load(data)                   # Assume topic is in retained discovery list
       if state                                      # Valid JSON state message
-        var config_splits = string.split(self.list_config[topic_index], "\001")
-        var hostname = config_splits[1]
-        var ipaddress = config_splits[2]
-        var devicename = config_splits[3]
-        var version = config_splits[4]
+        var hostname = self.list_config[topic_index][1]
+        var ipaddress = self.list_config[topic_index][2]
+        var devicename = self.list_config[topic_index][3]
+        var version = self.list_config[topic_index][4]
+        var version_splits = string.split(version, ".")
+        var version_int = 0
+        var multiplier = 0x1000000
+        for split : version_splits
+          version_int += int(split) * multiplier
+          if multiplier
+            multiplier /= 0x100
+          end
+        end
+        var version_num = format("%011i", version_int) # 00235143427 - Convert to string to enable multicolumn sort
 
         # tele/atomlite2/STATE = {"Time":"2025-09-24T14:13:00","Uptime":"0T00:15:09","UptimeSec":909,"Heap":142,"SleepMode":"Dynamic","Sleep":50,"LoadAvg":19,"MqttCount":1,"Berry":{"HeapUsed":12,"Objects":167},"POWER":"OFF","Dimmer":10,"Color":"1A0000","HSBColor":"0,100,10","Channel":[10,0,0],"Scheme":0,"Width":1,"Fade":"OFF","Speed":1,"LedTable":"ON","Wifi":{"AP":1,"SSId":"indebuurt_IoT","BSSId":"18:E8:29:CA:17:C1","Channel":11,"Mode":"HT40","RSSI":100,"Signal":-28,"LinkCount":1,"Downtime":"0T00:00:04"},"Hostname":"atomlite2","IPAddress":"192.168.2.208"}
         var uptime = state['Uptime']                # 0T00:15:09
+        var uptime_sec = format("%011i", state['UptimeSec']) # 00000000909 - Convert to string to enable multicolumn sort
         if state.find('Hostname')
           hostname = state['Hostname']              # atomlite2
           ipaddress = state['IPAddress']            # 192.168.2.208
         end
         var last_seen = tasmota.rtc('local')
-        var line = format("%s\001%s\001%s\001%d\001%s\001%s", hostname, ipaddress, uptime, last_seen, devicename, version)
-
+        var line = [hostname, ipaddress, uptime, uptime_sec, last_seen, devicename, version, version_num]
         if self.list_buffer.size()
           var list_index = 0
           var list_size = size(self.list_buffer)
-          var hostname_delim = format("%s\001", hostname) # Add find delimiter
           while list_index < list_size              # Use while loop as counter is decremented
-            if 0 == string.find(self.list_buffer[list_index], hostname_delim)
+            if self.list_buffer[list_index][0] == hostname || self.list_buffer[list_index][1] == ipaddress
               self.list_buffer.remove(list_index)   # Remove current state
               list_size -= 1                        # Continue for duplicates
             end
@@ -175,34 +216,35 @@ class devices_online
   #
   # Shell sort list of online devices based on user selected column and direction
   #################################################################################
-  def sort_col(l, col, dir)                         # Sort list based on col and Hostname (is first entry in line)
-    # For 50 records takes 6ms (primary key) or 25ms(ESP32S3&240MHz) / 50ms(ESP32@160MHz) (primary and secondary key)
+  def sort_col(l, col, dir)
     var cmp = /a,b -> a < b                         # Sort up
     if dir
       cmp = /a,b -> a > b                           # Sort down
     end
-    if col                                          # col is new primary key (not Hostname)
-      for i:l.keys()
-        var splits = string.split(l[i], "\001")
-        l[i] = splits[col] + "\002" + l[i]          # Add primary key to secondary key as "col" + Hostname
+
+    if col == 0                                     # Sort hostname as primary key
+      for i:1..size(l)-1                            # Sort string
+        var k = l[i]
+        var ks = k[col]
+        var j = i
+        while (j > 0) && !cmp(l[j-1][col], ks)
+          l[j] = l[j-1]
+          j -= 1
+        end
+        l[j] = k
+      end
+    else                                            # Sort any other string using primary and secondary key
+      for i:1..size(l)-1
+        var k = l[i]
+        var ks = k[col] + k[0]                      # Primary search key and Secondary unique search key (hostname)
+        var j = i
+        while (j > 0) && !cmp(l[j-1][col] + l[j-1][0], ks)
+          l[j] = l[j-1]
+          j -= 1
+        end
+        l[j] = k
       end
     end
-    for i:1..size(l)-1
-      var k = l[i]
-      var j = i
-      while (j > 0) && !cmp(l[j-1], k)
-        l[j] = l[j-1]
-        j -= 1
-      end
-      l[j] = k
-    end
-    if col
-      for i:l.keys()
-        var splits = string.split(l[i], "\002")     # Remove primary key
-        l[i] = splits[1]
-      end
-    end
-    return l
   end
 
   #################################################################################
@@ -217,7 +259,7 @@ class devices_online
     persist.std_column = self.sort_column
     persist.std_direction = self.sort_direction
     persist.save()
-#    tasmota.log("STD: Persist saved", 3)
+#    log("DVO: Persist saved", 3)
   end
 
   #################################################################################
@@ -254,9 +296,8 @@ class devices_online
       var list_index = 0
       var list_size = size(self.list_buffer)
       while list_index < list_size
-        var splits = string.split(self.list_buffer[list_index], "\001")
-        var last_seen = int(splits[3])
-        if time_window > last_seen                  # Remove offline devices
+        var last_seen = self.list_buffer[list_index][4]
+        if time_window > int(last_seen)             # Remove offline devices
           self.list_buffer.remove(list_index)
           list_size -= 1
         end
@@ -284,32 +325,34 @@ class devices_online
         end
         msg += "<th align='right'>Uptime&nbsp</th>"
       else
+#        var start = tasmota.millis()
         self.sort_col(self.list_buffer, self.sort_column, self.sort_direction) # Sort list by column
-
+#        var stop = tasmota.millis()
+#        log(format("DVO: Sort time %d ms", stop - start), 3)
         var icon_direction = self.sort_direction ? "&#x25BC" : "&#x25B2"
         if self.bool_devicename
-          msg += format("<th><a href='#p' onclick='la(\"&sd_sort=4\");'>Device Name</a>%s&nbsp</th>", self.sort_column == 4 ? icon_direction : "")
+          msg += format("<th><a href='#p' onclick='la(\"&sd_sort=5\");'>Device Name</a>%s&nbsp</th>", self.sort_column == 5 ? icon_direction : "")
         end
         if self.bool_version
-          msg += format("<th><a href='#p' onclick='la(\"&sd_sort=5\");'>Version</a>%s&nbsp</th>", self.sort_column == 5 ? icon_direction : "")
+          msg += format("<th><a href='#p' onclick='la(\"&sd_sort=7\");'>Version</a>%s&nbsp</th>", self.sort_column == 7 ? icon_direction : "")
         end
         msg += format("<th><a href='#p' onclick='la(\"&sd_sort=0\");'>Hostname</a>%s&nbsp</th>", self.sort_column == 0 ? icon_direction : "")
         if self.bool_ipaddress
           msg += format("<th><a href='#p' onclick='la(\"&sd_sort=1\");'>IP Address</a>%s&nbsp</th>", self.sort_column == 1 ? icon_direction : "")
         end
-        msg += format("<th align='right'><a href='#p' onclick='la(\"&sd_sort=2\");'>Uptime</a>%s&nbsp</th>", self.sort_column == 2 ? icon_direction : "")
+        msg += format("<th align='right'><a href='#p' onclick='la(\"&sd_sort=3\");'>Uptime</a>%s&nbsp</th>", self.sort_column == 3 ? icon_direction : "")
       end
 
       msg += "</tr>"
 
       while list_index < list_size
-        var splits = string.split(self.list_buffer[list_index], "\001")
-        var hostname = splits[0]
-        var ipaddress = splits[1]
-        var uptime = splits[2]
-        var last_seen = int(splits[3])
-        var devicename = splits[4]
-        var version = splits[5]
+        var hostname = self.list_buffer[list_index][0]
+        var ipaddress = self.list_buffer[list_index][1]
+        var uptime = self.list_buffer[list_index][2]
+        var uptime_sec = self.list_buffer[list_index][3]
+        var last_seen = self.list_buffer[list_index][4]
+        var devicename = self.list_buffer[list_index][5]
+        var version = self.list_buffer[list_index][6]
 
         msg += "<tr>"
         if self.bool_devicename
@@ -323,15 +366,9 @@ class devices_online
           msg += format("<td><a target=_blank href='http://%s'>%s&nbsp</a></td>", ipaddress, ipaddress)
         end
 
-        var uptime_str = string.replace(uptime, "T", ":")  # 11T21:50:34 -> 11:21:50:34
-        var uptime_splits = string.split(uptime_str, ":")
-        var uptime_sec = (int(uptime_splits[0]) * 86400) + # 11 * 86400
-                         (int(uptime_splits[1]) * 3600) +  # 21 * 3600
-                         (int(uptime_splits[2]) * 60) +    # 50 * 60
-                         int(uptime_splits[3])      # 34 
-        if last_seen >= (now - self.line_highlight) # Highlight changes within latest seconds
+        if int(last_seen) >= (now - self.line_highlight) # Highlight changes within latest seconds
           msg += format("<td align='right' style='color:%s'>%s</td>", self.line_highlight_color, uptime)
-        elif uptime_sec < self.line_teleperiod      # Highlight changes just after restart
+        elif int(uptime_sec) < self.line_teleperiod  # Highlight changes just after restart
           msg += format("<td align='right' style='color:%s'>%s</td>", self.line_lowuptime_color, uptime)
         else 
           msg += format("<td align='right'>%s</td>", uptime)
