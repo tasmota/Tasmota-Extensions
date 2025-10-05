@@ -45,17 +45,13 @@ class devices_online
   # install the extension and allocate all resources
   #################################################################################
   def init()
-    self.bool_devicename = persist.std_devicename   # Show device name
-    self.bool_version = persist.std_version         # Show version
-    self.bool_ipaddress = persist.std_ipaddress     # Show IP address
-
-    self.sort_direction = persist.std_direction     # Sort direction (0) Up or (1) Down
-    if !self.sort_direction
-      self.sort_direction = 0                       # Default Up
-    end
-    self.sort_column = persist.std_column           # Sort column
-    if !self.sort_column
-      self.sort_column = 0                          # Default Hostname
+    self.bool_devicename = persist.find("dvo_devicename", 0) # Show device name
+    self.bool_version = persist.find("dvo_version", 0)       # Show version
+    self.bool_ipaddress = persist.find("dvo_upaddress", 0)   # Show IP address
+    self.sort_direction = persist.find("dvo_direction", 0)   # Sort direction (0) Up or (1) Down, default Up
+    self.sort_column = persist.find("dvo_column", 0)         # Sort column, default Hostname
+    if !persist.has("dvo_column")
+      self.persist_save()
     end
     self.sort_last_column = self.sort_column        # Sort last column to detect direction toggle
 
@@ -253,11 +249,11 @@ class devices_online
   # Save user data to be used on restart
   #################################################################################
   def persist_save()
-    persist.std_devicename = self.bool_devicename
-    persist.std_version = self.bool_version
-    persist.std_ipaddress = self.bool_ipaddress
-    persist.std_column = self.sort_column
-    persist.std_direction = self.sort_direction
+    persist.dvo_devicename = self.bool_devicename
+    persist.dvo_version = self.bool_version
+    persist.dvo_ipaddress = self.bool_ipaddress
+    persist.dvo_column = self.sort_column
+    persist.dvo_direction = self.sort_direction
     persist.save()
 #    log("DVO: Persist saved", 3)
   end
@@ -270,15 +266,15 @@ class devices_online
   def web_sensor()
     if webserver.has_arg("sd_dn")
       # Toggle display Device Name
-      if self.bool_devicename self.bool_devicename = false else self.bool_devicename = true end
+      self.bool_devicename ^= 1
       self.persist_save()
     elif webserver.has_arg("sd_sw")
       # Toggle display software version
-      if self.bool_version self.bool_version = false else self.bool_version = true end
+      self.bool_version ^= 1
       self.persist_save()
     elif webserver.has_arg("sd_ip")
       # Toggle display IP address
-      if self.bool_ipaddress self.bool_ipaddress = false else self.bool_ipaddress = true end
+      self.bool_ipaddress ^= 1
       self.persist_save()
     elif webserver.has_arg("sd_sort")
       # Toggle sort column
