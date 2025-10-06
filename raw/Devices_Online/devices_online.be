@@ -47,7 +47,7 @@ class devices_online
   def init()
     self.bool_devicename = persist.find("dvo_devicename", 0) # Show device name
     self.bool_version = persist.find("dvo_version", 0)       # Show version
-    self.bool_ipaddress = persist.find("dvo_upaddress", 0)   # Show IP address
+    self.bool_ipaddress = persist.find("dvo_ipaddress", 0)   # Show IP address
     self.sort_direction = persist.find("dvo_direction", 0)   # Sort direction (0) Up or (1) Down, default Up
     self.sort_column = persist.find("dvo_column", 0)         # Sort column, default Hostname
     if !persist.has("dvo_column")
