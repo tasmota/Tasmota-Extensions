@@ -3,11 +3,6 @@
 #
 # Copyright (C) 2025  Stephan Hadinger & Theo Arends
 #
-# Enable either
-#  line_option = 1  : Scroll 'line_cnt' lines
-# or
-#  line_option = 2  : Show devices updating within 'line_teleperiod'
-#
 # rm Devices_Online.tapp; zip -j -0 Devices_Online.tapp Devices_Online/*
 ###################################################################################
 
@@ -17,27 +12,120 @@ import string
 import webserver
 import persist
 
-class devices_online
-#  static var line_option = 1                       # Scroll line_cnt lines
-  static var line_option = 2                        # Show devices updating within line_teleperiod
+###################################################################################
+# Display Configuration Devices Online GUI
+#---------------------------------------------------------------------------------#
+class dev_online_settings
+  #################################################################################
+  # init
+  #
+  # install the extension and allocate all resources
+  #################################################################################
+  def init()
+    tasmota.add_driver(self)
+    if tasmota.is_network_up()
+      self.web_add_handler()                        # If init is called after the network is up, `web_add_handler` event is not fired
+    end
+  end
 
-  static var line_cnt = 10                          # Option 1 number of lines to show
-  static var line_teleperiod = 600                  # Option 2 number of teleperiod seconds for devices to be shown as online
-  static var line_highlight = 10                    # Highlight latest change duration in seconds
+  def close()
+    webserver.remove_route("/dvo")
+    tasmota.remove_driver(self)
+  end
+
+  def web_add_config_button()
+    webserver.content_send("<p></p><form id=ac action='dvo' style='display: block;' method='get'><button>Devices Online</button></form>")
+  end
+
+  def page_dev_online()
+    if !webserver.check_privileged_access() return nil end
+
+    if webserver.has_arg('save')
+      persist.dvo_lines = webserver.arg('dvo11')
+      persist.dvo_online_window = webserver.arg('dvo12')
+      persist.dvo_time_highlight = webserver.arg('dvo13')
+      persist.dvo_devicename = (webserver.arg('dvo1')) ? 1 : 0
+      persist.dvo_ipaddress = (webserver.arg('dvo3')) ? 1 : 0
+      persist.dvo_version = (webserver.arg('dvo2')) ? 1 : 0
+      persist.dvo_heap = (webserver.arg('dvo6')) ? 1 : 0
+      persist.dvo_berryheap = (webserver.arg('dvo4')) ? 1 : 0
+      persist.dvo_berryobject = (webserver.arg('dvo7')) ? 1 : 0
+      persist.dvo_wifirssi = (webserver.arg('dvo5')) ? 1 : 0
+      persist.save()
+
+      webserver.redirect("/cn?")                    # Go back to Configuration menu
+    end
+
+    var dvo_lines = persist.find("dvo_lines", 0)
+    var dvo_online_window = persist.find("dvo_online_window", 600)
+    var dvo_time_highlight = persist.find("dvo_time_highlight", 10)
+    var dvo_devicename = (persist.find("dvo_devicename", 0)) ? " checked" : ""
+    var dvo_ipaddress = (persist.find("dvo_ipaddress", 0)) ? " checked" : ""
+    var dvo_version = (persist.find("dvo_version", 0)) ? " checked" : ""
+    var dvo_heap = (persist.find("dvo_heap", 0)) ? " checked" : ""
+    var dvo_berryheap = (persist.find("dvo_berryheap", 0)) ? " checked" : ""
+    var dvo_berryobject = (persist.find("dvo_berryobject", 0)) ? " checked" : ""
+    var dvo_wifirssi = (persist.find("dvo_wifirssi", 0)) ? " checked" : ""
+
+    webserver.content_start("DevOnline")            #- title of the web page -#
+    webserver.content_send_style()                  #- send standard Tasmota styles -#
+
+    webserver.content_send(
+    format("<fieldset>"
+     "<legend><b>&nbsp;Devices Online&nbsp;</b></legend>"
+     "<form method='get' action='dvo'>"
+     "<p></p>"
+     "<table>"
+     "<tr><td style='width:260px'><b>Scroll display lines</b></td><td style='width:70px'><input id='dvo11' name='dvo11' type='number' min='0' max='60' step='2' value='%s'></td></tr>"
+     "<tr><td style='width:260px'><b>Online window (sec)</b></td><td style='width:70px'><input id='dvo12' name='dvo12' type='number' min='300' max='1000' step='30' value='%s'></td></tr>"
+     "<tr><td style='width:260px'><b>Highlight refreshed (sec)</b></td><td style='width:70px'><input id='dvo13' name='dvo13' type='number' min='10' max='60' step='2' value='%s'></td></tr>"
+     "</table>"
+     "<p></p>"
+     "<fieldset><legend><b>&nbsp;Columns Shown&nbsp;</b></legend>"
+     "<table>"
+     "<tr><td style=width:40px'><input id='dvo1' name='dvo1' type='checkbox'%s></td><td><b>Device Name</b></td></tr>"
+     "<tr><td style=width:40px'> </td><td><b>Hostname</b></td></tr>"
+     "<tr><td style=width:40px'><input id='dvo3' name='dvo3' type='checkbox'%s></td><td><b>IP Address</b></td></tr>"
+     "<tr><td style=width:40px'><input id='dvo2' name='dvo2' type='checkbox'%s></td><td><b>Version</b></td></tr>"
+     "<tr><td style=width:40px'><input id='dvo6' name='dvo6' type='checkbox'%s></td><td><b>Heap Free (KB)</b></td></tr>"
+     "<tr><td style=width:40px'><input id='dvo4' name='dvo4' type='checkbox'%s></td><td><b>Berry Heap Usage (KB)</b></td></tr>"
+     "<tr><td style=width:40px'><input id='dvo7' name='dvo7' type='checkbox'%s></td><td><b>Berry Object Count</b></td></tr>"
+     "<tr><td style=width:40px'><input id='dvo5' name='dvo5' type='checkbox'%s></td><td><b>WiFi RSSI</b></td></tr>"
+     "<tr><td style=width:40px'> </td><td><b>Uptime</b></td></tr>"
+     "</table>"
+     "</fieldset>"
+     "<br>"
+     "<button name='save' type='submit' class='button bgrn'>Save</button>"
+     "</form>"
+     "</fieldset>", dvo_lines, dvo_online_window, dvo_time_highlight,
+     dvo_devicename, dvo_ipaddress, dvo_version, dvo_heap, dvo_berryheap, dvo_berryobject, dvo_wifirssi))
+
+    webserver.content_button(webserver.BUTTON_CONFIGURATION) #- button back to conf page -#
+    webserver.content_stop()                                 #- end of web page -#
+  end
+
+  def web_add_handler()
+    webserver.on("/dvo", / -> self.page_dev_online())
+  end
+end
+#---------------------------------------------------------------------------------#
+# Display Configuration Devices Online GUI
+###################################################################################
+
+
+###################################################################################
+# extension devices_online
+#---------------------------------------------------------------------------------#
+class devices_online
   static var line_highlight_color = "yellow"        # Latest change highlight HTML color like "#FFFF00" or "yellow"
   static var line_lowuptime_color = "lime"          # Low uptime highlight HTML color like "#00FF00" or "lime"
 
   var mqtt_state                                    # MQTT tele STATE subscribe format
   var mqtt_topic_idx                                # Index of %topic% within full topic
   var mqtt_step                                     # MQTT message state
-  var bool_devicename                               # Show device name
-  var bool_version                                  # Show version
-  var bool_ipaddress                                # Show IP address
-  var sort_direction                                # Sort direction
-  var sort_column                                   # Sort column
   var sort_last_column                              # Sort last column
-  var list_buffer                                   # Buffer storing lines
-  var list_config                                   # Buffer storing retained config
+  var list_devices                                  # Buffer storing devices
+  var dvo_settings
 
   #################################################################################
   # init
@@ -45,18 +133,24 @@ class devices_online
   # install the extension and allocate all resources
   #################################################################################
   def init()
-    self.bool_devicename = persist.find("dvo_devicename", 0) # Show device name
-    self.bool_version = persist.find("dvo_version", 0)       # Show version
-    self.bool_ipaddress = persist.find("dvo_ipaddress", 0)   # Show IP address
-    self.sort_direction = persist.find("dvo_direction", 0)   # Sort direction (0) Up or (1) Down, default Up
-    self.sort_column = persist.find("dvo_column", 0)         # Sort column, default Hostname
     if !persist.has("dvo_column")
-      self.persist_save()
+      persist.dvo_lines = 0                         # Show growing list of devices
+      persist.dvo_online_window = 600               # Number of teleperiod seconds for devices to be shown as online
+      persist.dvo_time_highlight = 10               # Highlight latest change duration in seconds
+      persist.dvo_devicename = 0                    # Show device name
+      persist.dvo_ipaddress = 0                     # Show IP address
+      persist.dvo_version = 0                       # Show version
+      persist.dvo_heap = 0                          # Show Heap (KB)
+      persist.dvo_berryheap = 0                     # Show Berry HeapUsed (KB)
+      persist.dvo_berryobject = 0                   # Show Berry Object Count
+      persist.dvo_wifirssi = 0                      # Show WiFi RSSI (%)
+      persist.dvo_column = 0                        # Sort column, default Hostname
+      persist.dvo_direction = 0                     # Sort direction (0) Up or (1) Down, default Up
+      persist.save()
     end
-    self.sort_last_column = self.sort_column        # Sort last column to detect direction toggle
+    self.sort_last_column = persist.dvo_column      # Sort last column to detect direction toggle
 
-    self.list_buffer = []                           # Init line buffer list
-    self.list_config = []                           # Init retained config buffer list
+    self.list_devices = []                          # Init device buffer list
 
     var parts = string.split(tasmota.cmd('_FullTopic', true)['FullTopic'], '/')
     var prefix3 = tasmota.cmd("Prefix", true)['Prefix3'] # tele = Prefix3 used by STATE message
@@ -90,6 +184,8 @@ class devices_online
     if !mqtt.connected()
       log("DVO: Need MQTT connected", 1)
     end
+
+    self.dvo_settings = dev_online_settings()
   end
 
   #################################################################################
@@ -100,20 +196,27 @@ class devices_online
   def unload()
     mqtt.unsubscribe("tasmota/discovery/+/config")
     mqtt.unsubscribe(self.mqtt_state)
+    self.dvo_settings.close()
+    tasmota.remove_driver(self.dvo_settings)
     tasmota.remove_driver(self)
+    self.list_devices.clear()
   end
 
   #################################################################################
   # handle_discovery_data(discovery_topic, idx, data, databytes)
   #
-  # Handle MQTT Tasmota Discovery Config data
+  # Handle retained MQTT Tasmota Discovery Config data
+  #
+  # A restarted device also provides retained Tasmota Discovery Config data but
+  #  that will be received AFTER a restart STATE message therefor we need to handle
+  #  discovery data as an update to already received STATE data
   #################################################################################
   def handle_discovery_data(discovery_topic, idx, data, databytes)
     if self.mqtt_step == 0
-      log("DVO: Discovery started...", 3)
       self.mqtt_step = 1
+      log("DVO: Discovery started...", 3)
+#      log(format("DVO: Devices size %d, Memory %s", self.list_devices.size(), tasmota.memory()), 3)
     end
-#    log(f"DVO: Discovery topic '{discovery_topic}'", 4)
     var config = json.load(data)
     if config
       # tasmota/discovery/142B2F9FAF38/config = {"ip":"192.168.2.208","dn":"AtomLite2","fn":["Tasmota",null,null,null,null,null,null,null],"hn":"atomlite2","mac":"142B2F9FAF38","md":"M5Stack Atom Lite","ty":0,"if":0,"cam":0,"ofln":"Offline","onln":"Online","state":["OFF","ON","TOGGLE","HOLD"],"sw":"15.0.1.4","t":"atomlite2","ft":"%prefix%/%topic%/","tp":["cmnd","stat","tele"],"rl":[2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],"swc":[-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1],"swn":[null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null],"btn":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],"so":{"4":0,"11":0,"13":0,"17":0,"20":0,"30":0,"68":0,"73":0,"82":0,"114":0,"117":0},"lk":1,"lt_st":3,"bat":0,"dslp":0,"sho":[],"sht":[],"ver":1} (retained)
@@ -122,19 +225,49 @@ class devices_online
       var ipaddress = config['ip']
       var devicename = config['dn']
       var version = config['sw']
-      var line = [topic, hostname, ipaddress, devicename, version]
-      if self.list_config.size()
-        var list_index = 0
-        var list_size = size(self.list_config)
-        while list_index < list_size                # Use while loop as counter is decremented
-          if self.list_config[list_index][0] == topic
-            self.list_config.remove(list_index)     # Remove current config
-            list_size -= 1                          # Continue for duplicates
-          end
-          list_index += 1
+      var version_splits = string.split(version, ".")
+      var version_int = 0
+      var multiplier = 0x1000000
+      for split : version_splits
+        version_int += int(split) * multiplier
+        if multiplier
+          multiplier /= 0x100
         end
       end
-      self.list_config.push(line)                   # Add (re-discovered) config as last entry
+      var version_num = format("%011i", version_int) # 00235143427 - Convert to string to enable multicolumn sort
+      var last_seen = str(tasmota.rtc('local'))
+      var uptime = " "
+      var uptime_sec = " "
+      var heap = " "
+      var berryheap = " "
+      var berryobject = " "
+      var wifirssi = " "
+
+      #           0      1         2          3           4        5            6          7       8           9          10        11    12
+      var line = [topic, hostname, ipaddress, devicename, version, version_num, last_seen, uptime, uptime_sec, berryheap, wifirssi, heap, berryobject]
+      var update = 0;
+      for i: self.list_devices.keys()
+        if self.list_devices[i][0] == topic
+          update = 1
+          if self.list_devices[i][8] != " "         # Process posible received STATE data
+            uptime = self.list_devices[i][7]
+            uptime_sec = self.list_devices[i][8]
+            berryheap = self.list_devices[i][9]
+            wifirssi = self.list_devices[i][10]
+            heap = self.list_devices[i][11]
+            berryobject = self.list_devices[i][12]
+          end  
+#          log(f"DVO: Discovery --- update {self.list_devices[i]}", 3)
+          var update_line = [topic, hostname, ipaddress, devicename, version, version_num, last_seen, uptime, uptime_sec, berryheap, wifirssi, heap, berryobject]
+#          log(f"DVO: Discovery +++ update {update_line}", 3)
+          self.list_devices[i] = update_line        # Update current config
+          break
+        end
+      end
+      if update == 0
+#        log(f"DVO: Discovery +++ add    {line}", 3)
+        self.list_devices.push(line)                # Add (re-discovered) config as last entry
+      end
     end
     return true                                     # return true to stop propagation as a Tasmota cmd
   end
@@ -146,62 +279,112 @@ class devices_online
   #################################################################################
   def handle_state_data(tele_topic, idx, data, databytes)
     if self.mqtt_step == 1 
-      log("DVO: Discovery complete", 3)
       self.mqtt_step = 2
+      log("DVO: Discovery complete", 3)
     end
 #    log(f"DVO: STATE topic '{tele_topic}'", 4)
     var subtopic = string.split(tele_topic, "/")
     if subtopic[-1] == "STATE"                      # we are only serving topic ending in STATE
       var topic = subtopic[self.mqtt_topic_idx]
-      var topic_index = -1
-      for i: self.list_config.keys()
-        if self.list_config[i][0] == topic
-          topic_index = i
-          break
-        end
-      end
-#      log(format("DVO: Topic '%s', Index %d, Size %d, Line '%s'", topic, topic_index, self.list_config.size(), self.list_config[topic_index]), 3)
-      if topic_index == -1 return true end          # return true to stop propagation as a Tasmota cmd
-
       var state = json.load(data)                   # Assume topic is in retained discovery list
       if state                                      # Valid JSON state message
-        var hostname = self.list_config[topic_index][1]
-        var ipaddress = self.list_config[topic_index][2]
-        var devicename = self.list_config[topic_index][3]
-        var version = self.list_config[topic_index][4]
-        var version_splits = string.split(version, ".")
-        var version_int = 0
-        var multiplier = 0x1000000
-        for split : version_splits
-          version_int += int(split) * multiplier
-          if multiplier
-            multiplier /= 0x100
+
+        var hostname = " "
+        var ipaddress = " "
+        var devicename = " "
+        var version = " "
+        var version_num = " "
+        var topic_index = -1
+        for i: self.list_devices.keys()
+          if self.list_devices[i][0] == topic
+            hostname = self.list_devices[i][1]
+            ipaddress = self.list_devices[i][2]
+            devicename = self.list_devices[i][3]
+            version = self.list_devices[i][4]
+            version_num = self.list_devices[i][5]
+            topic_index = i
+            break
           end
         end
-        var version_num = format("%011i", version_int) # 00235143427 - Convert to string to enable multicolumn sort
 
         # tele/atomlite2/STATE = {"Time":"2025-09-24T14:13:00","Uptime":"0T00:15:09","UptimeSec":909,"Heap":142,"SleepMode":"Dynamic","Sleep":50,"LoadAvg":19,"MqttCount":1,"Berry":{"HeapUsed":12,"Objects":167},"POWER":"OFF","Dimmer":10,"Color":"1A0000","HSBColor":"0,100,10","Channel":[10,0,0],"Scheme":0,"Width":1,"Fade":"OFF","Speed":1,"LedTable":"ON","Wifi":{"AP":1,"SSId":"indebuurt_IoT","BSSId":"18:E8:29:CA:17:C1","Channel":11,"Mode":"HT40","RSSI":100,"Signal":-28,"LinkCount":1,"Downtime":"0T00:00:04"},"Hostname":"atomlite2","IPAddress":"192.168.2.208"}
-        var uptime = state['Uptime']                # 0T00:15:09
-        var uptime_sec = format("%011i", state['UptimeSec']) # 00000000909 - Convert to string to enable multicolumn sort
         if state.find('Hostname')
+          # > Tasmota v15.0.1.2
           hostname = state['Hostname']              # atomlite2
           ipaddress = state['IPAddress']            # 192.168.2.208
         end
-        var last_seen = tasmota.rtc('local')
-        var line = [hostname, ipaddress, uptime, uptime_sec, last_seen, devicename, version, version_num]
-        if self.list_buffer.size()
+
+        var last_seen = str(tasmota.rtc('local'))
+        var uptime = state['Uptime']                # 0T00:15:09
+        var uptime_sec_int
+        if state.find('UptimeSec')
+          uptime_sec_int = state['UptimeSec']       # 909
+        else
+          # < Tasmota v7.0.0.0
+          var uptime_str = string.replace(uptime, "T", ":")  # 0T00:15:09 -> 0:00:15:09
+          var uptime_splits = string.split(uptime_str, ":")
+          uptime_sec_int = (int(uptime_splits[0]) * 86400) + # 0 * 86400
+                           (int(uptime_splits[1]) * 3600) +  # 00 * 3600
+                           (int(uptime_splits[2]) * 60) +    # 15 * 60
+                           int(uptime_splits[3])    # 09 
+        end
+        var uptime_sec = format("%011i", uptime_sec_int) # 00000000909 - Convert to string to enable multicolumn sort
+
+        var iheap = 0
+        if state.find('Heap')
+          iheap = state['Heap']                     # 142
+        end
+        var heap = format("%05i", iheap)            # 00142 - Convert to string to enable multicolumn sort
+
+        var bheap = 0
+        if state.find('Berry') && state['Berry'].find('HeapUsed')
+          bheap = state['Berry']['HeapUsed']        # 12
+        end
+        var berryheap = format("%05i", bheap)       # 00012 - Convert to string to enable multicolumn sort
+
+        var bobject = 0
+        if state.find('Berry') && state['Berry'].find('Objects')
+          bobject = state['Berry']['Objects']       # 167
+        end
+        var berryobject = format("%05i", bobject)   # 00167 - Convert to string to enable multicolumn sort
+
+        var wrssi = 0
+        if state.find('Wifi') && state['Wifi'].find('RSSI')
+          wrssi = state['Wifi']['RSSI']             # 100
+        end
+        var wifirssi = format("%03i", wrssi)        # 100 - Convert to string to enable multicolumn sort
+
+        #           0      1         2          3           4        5            6          7       8           9          10        11    12
+        var line = [topic, hostname, ipaddress, devicename, version, version_num, last_seen, uptime, uptime_sec, berryheap, wifirssi, heap, berryobject]
+
+        var dvo_online_window = int(persist.find("dvo_online_window", 600))
+        var time_window = int(last_seen) - dvo_online_window
+        var update = 0;
+        var list_size = size(self.list_devices)
+        if list_size > 0
           var list_index = 0
-          var list_size = size(self.list_buffer)
           while list_index < list_size              # Use while loop as counter is decremented
-            if self.list_buffer[list_index][0] == hostname || self.list_buffer[list_index][1] == ipaddress
-              self.list_buffer.remove(list_index)   # Remove current state
-              list_size -= 1                        # Continue for duplicates
+            if update == 0 && self.list_devices[list_index][0] == topic
+              update = 1
+#              log(f"DVO:     State --- update {self.list_devices[list_index]}", 3)
+              self.list_devices[list_index] = line  # Update state
+#              log(f"DVO:     State +++ update {line}", 3)
+            elif time_window > int(self.list_devices[list_index][6]) ||
+              self.list_devices[list_index][1] == hostname ||
+              self.list_devices[list_index][2] == ipaddress
+#              log(f"DVO:     State --- delete {self.list_devices[list_index]}", 3)
+              self.list_devices.remove(list_index)  # Remove duplicates or offline device
+              list_size -= 1
+              list_index -= 1
             end
             list_index += 1
           end
         end
-        self.list_buffer.push(line)                 # Add state as last entry
-
+        if update == 0
+#          log(f"DVO:     State +++ add    {line}", 3)
+          self.list_devices.push(line)              # Add state as last entry
+        end
+#        log(format("DVO: Device size %d, Memory %s", self.list_devices.size(), tasmota.memory()), 3)
       end
     end
     return true                                     # return true to stop propagation as a Tasmota cmd
@@ -218,7 +401,7 @@ class devices_online
       cmp = /a,b -> a > b                           # Sort down
     end
 
-    if col == 0                                     # Sort hostname as primary key
+    if col == 1                                     # Sort hostname as primary key
       for i:1..size(l)-1                            # Sort string
         var k = l[i]
         var ks = k[col]
@@ -232,9 +415,9 @@ class devices_online
     else                                            # Sort any other string using primary and secondary key
       for i:1..size(l)-1
         var k = l[i]
-        var ks = k[col] + k[0]                      # Primary search key and Secondary unique search key (hostname)
+        var ks = k[col] + k[1]                      # Primary search key and Secondary unique search key (hostname)
         var j = i
-        while (j > 0) && !cmp(l[j-1][col] + l[j-1][0], ks)
+        while (j > 0) && !cmp(l[j-1][col] + l[j-1][1], ks)
           l[j] = l[j-1]
           j -= 1
         end
@@ -244,143 +427,172 @@ class devices_online
   end
 
   #################################################################################
-  # persist_save
-  #
-  # Save user data to be used on restart
-  #################################################################################
-  def persist_save()
-    persist.dvo_devicename = self.bool_devicename
-    persist.dvo_version = self.bool_version
-    persist.dvo_ipaddress = self.bool_ipaddress
-    persist.dvo_column = self.sort_column
-    persist.dvo_direction = self.sort_direction
-    persist.save()
-#    log("DVO: Persist saved", 3)
-  end
-
-  #################################################################################
   # web_sensor
   #
   # Display Devices Online in user selected sorted columns
   #################################################################################
   def web_sensor()
-    if webserver.has_arg("sd_dn")
-      # Toggle display Device Name
-      self.bool_devicename ^= 1
-      self.persist_save()
-    elif webserver.has_arg("sd_sw")
-      # Toggle display software version
-      self.bool_version ^= 1
-      self.persist_save()
-    elif webserver.has_arg("sd_ip")
-      # Toggle display IP address
-      self.bool_ipaddress ^= 1
-      self.persist_save()
-    elif webserver.has_arg("sd_sort")
-      # Toggle sort column
-      self.sort_column = int(webserver.arg("sd_sort"))
-      if self.sort_last_column == self.sort_column
-        self.sort_direction ^= 1
+    if self.mqtt_step < 2 return end                # Do not display until discovery is complete
+
+    if webserver.has_arg("sd_sort")
+      persist.dvo_column = int(webserver.arg("sd_sort")) # Change sort column
+      if self.sort_last_column == persist.dvo_column
+        persist.dvo_direction ^= 1                  # Toggle direction
       end
-      self.sort_last_column = self.sort_column
-      self.persist_save()
+      self.sort_last_column = persist.dvo_column
+      persist.save()
     end
 
-    if self.list_buffer.size()
-      var now = tasmota.rtc('local')
-      var time_window = now - self.line_teleperiod
-      var list_index = 0
-      var list_size = size(self.list_buffer)
-      while list_index < list_size
-        var last_seen = self.list_buffer[list_index][4]
-        if time_window > int(last_seen)             # Remove offline devices
-          self.list_buffer.remove(list_index)
-          list_size -= 1
-        end
-        list_index += 1
-      end
-      if !list_size return end                      # If list became empty bail out
+    if self.list_devices.size()
+      var dvo_online_window = int(persist.find("dvo_online_window", 600))
+      var dvo_lines = int(persist.find("dvo_lines", 0))
+      var dvo_time_highlight = int(persist.find("dvo_time_highlight", 10))
+      var dvo_devicename = persist.find("dvo_devicename", 0)
+      var dvo_ipaddress = persist.find("dvo_ipaddress", 0)
+      var dvo_version = persist.find("dvo_version", 0)
+      var dvo_heap = persist.find("dvo_heap", 0)
+      var dvo_berryheap = persist.find("dvo_berryheap", 0)
+      var dvo_berryobject = persist.find("dvo_berryobject", 0)
+      var dvo_wifirssi = persist.find("dvo_wifirssi", 0)
 
       var msg = "</table><table style='width:100%;font-size:80%'>" # Terminate two column table and open new table
       msg += "<tr>"
 
-      list_index = 0
-      if 1 == self.line_option
-        list_index = list_size - self.line_cnt      # Offset in list using self.line_cnt
-        if list_index < 0 list_index = 0 end
+      if dvo_lines > 0                              # Fixed number of last updated lines
+        self.sort_col(self.list_devices, 6, 1)      # Sort list by last_seen and down
 
-        if self.bool_devicename
+        if dvo_devicename
           msg += "<th>Device Name&nbsp</th>"
         end
-        if self.bool_version
-          msg += "<th>Version&nbsp</th>"
-        end
         msg += "<th>Hostname&nbsp</th>"
-        if self.bool_ipaddress
+        if dvo_ipaddress
           msg += "<th>IP Address&nbsp</th>"
         end
+        if dvo_version
+          msg += "<th>Version&nbsp</th>"
+        end
+        if dvo_heap
+          msg += "<th align='right'>Heap&nbsp</th>"
+        end
+        if dvo_berryheap
+          msg += "<th align='right'>BHeap&nbsp</th>"
+        end
+        if dvo_berryobject
+          msg += "<th align='right'>BObject&nbsp</th>"
+        end
+        if dvo_wifirssi
+          msg += "<th align='right'>RSSI&nbsp</th>"
+        end
         msg += "<th align='right'>Uptime&nbsp</th>"
-      else
+      else                                          # All devices sorted by user selected column
+        #               0  1  2              3               4  5            6  7  8  9              10            11        12
+        var list_dvo = [0, 1, dvo_ipaddress, dvo_devicename, 0, dvo_version, 0, 0, 1, dvo_berryheap, dvo_wifirssi, dvo_heap, dvo_berryobject]
+        if persist.dvo_column >= list_dvo.size() || list_dvo[persist.dvo_column] == 0
+          persist.dvo_column = 1                    # Hostname as default sort column
+          self.sort_last_column = persist.dvo_column
+          persist.save()
+        end
+#        log(format("DVO: list_dvo '%s'", list_dvo), 3)
+
 #        var start = tasmota.millis()
-        self.sort_col(self.list_buffer, self.sort_column, self.sort_direction) # Sort list by column
+        self.sort_col(self.list_devices, persist.dvo_column, persist.dvo_direction) # Sort list by column
 #        var stop = tasmota.millis()
 #        log(format("DVO: Sort time %d ms", stop - start), 3)
-        var icon_direction = self.sort_direction ? "&#x25BC" : "&#x25B2"
-        if self.bool_devicename
-          msg += format("<th><a href='#p' onclick='la(\"&sd_sort=5\");'>Device Name</a>%s&nbsp</th>", self.sort_column == 5 ? icon_direction : "")
+
+        var icon_direction = persist.dvo_direction ? "&#x25BC" : "&#x25B2"
+        if dvo_devicename
+          msg += format("<th><a href='#p' onclick='la(\"&sd_sort=3\");'>Device Name</a>%s&nbsp</th>", persist.dvo_column == 3 ? icon_direction : "")
         end
-        if self.bool_version
-          msg += format("<th><a href='#p' onclick='la(\"&sd_sort=7\");'>Version</a>%s&nbsp</th>", self.sort_column == 7 ? icon_direction : "")
+        msg += format("<th><a href='#p' onclick='la(\"&sd_sort=1\");'>Hostname</a>%s&nbsp</th>", persist.dvo_column == 1 ? icon_direction : "")
+        if dvo_ipaddress
+          msg += format("<th><a href='#p' onclick='la(\"&sd_sort=2\");'>IP Address</a>%s&nbsp</th>", persist.dvo_column == 2 ? icon_direction : "")
         end
-        msg += format("<th><a href='#p' onclick='la(\"&sd_sort=0\");'>Hostname</a>%s&nbsp</th>", self.sort_column == 0 ? icon_direction : "")
-        if self.bool_ipaddress
-          msg += format("<th><a href='#p' onclick='la(\"&sd_sort=1\");'>IP Address</a>%s&nbsp</th>", self.sort_column == 1 ? icon_direction : "")
+        if dvo_version
+          msg += format("<th><a href='#p' onclick='la(\"&sd_sort=5\");'>Version</a>%s&nbsp</th>", persist.dvo_column == 5 ? icon_direction : "")
         end
-        msg += format("<th align='right'><a href='#p' onclick='la(\"&sd_sort=3\");'>Uptime</a>%s&nbsp</th>", self.sort_column == 3 ? icon_direction : "")
+        if dvo_heap
+          msg += format("<th align='right'><a href='#p' onclick='la(\"&sd_sort=11\");'>Heap</a>%s&nbsp</th>", persist.dvo_column == 11 ? icon_direction : "")
+        end
+        if dvo_berryheap
+          msg += format("<th align='right'><a href='#p' onclick='la(\"&sd_sort=9\");'>BHeap</a>%s&nbsp</th>", persist.dvo_column == 9 ? icon_direction : "")
+        end
+        if dvo_berryobject
+          msg += format("<th align='right'><a href='#p' onclick='la(\"&sd_sort=12\");'>BObject</a>%s&nbsp</th>", persist.dvo_column == 12 ? icon_direction : "")
+        end
+        if dvo_wifirssi
+          msg += format("<th align='right'><a href='#p' onclick='la(\"&sd_sort=10\");'>RSSI</a>%s&nbsp</th>", persist.dvo_column == 10 ? icon_direction : "")
+        end
+        msg += format("<th align='right'><a href='#p' onclick='la(\"&sd_sort=8\");'>Uptime</a>%s&nbsp</th>", persist.dvo_column == 8 ? icon_direction : "")
       end
 
       msg += "</tr>"
 
-      while list_index < list_size
-        var hostname = self.list_buffer[list_index][0]
-        var ipaddress = self.list_buffer[list_index][1]
-        var uptime = self.list_buffer[list_index][2]
-        var uptime_sec = self.list_buffer[list_index][3]
-        var last_seen = self.list_buffer[list_index][4]
-        var devicename = self.list_buffer[list_index][5]
-        var version = self.list_buffer[list_index][6]
+      var list_index = 0
+      var devices = 0
+      var now = tasmota.rtc('local')
+      for i: self.list_devices.keys()
+        #  0      1         2          3           4        5            6          7       8           9          10        11    12
+        # [topic, hostname, ipaddress, devicename, version, version_num, last_seen, uptime, uptime_sec, berryheap, wifirssi, heap, berryobject]
+        var uptime = self.list_devices[i][7]
+        if uptime == " " continue end               # No STATE info
+
+        devices += 1
+
+        if dvo_lines
+          list_index += 1
+          if list_index > dvo_lines continue end    # Keep counting devices
+        end
+
+        var hostname = self.list_devices[i][1]
+        var ipaddress = self.list_devices[i][2]
+        var devicename = self.list_devices[i][3]
+        var version = self.list_devices[i][4]
+        var last_seen = self.list_devices[i][6]
+        var uptime_sec = self.list_devices[i][8]
+        var berryheap = self.list_devices[i][9]
+        var wifirssi = self.list_devices[i][10]
+        var heap = self.list_devices[i][11]
+        var berryobject = self.list_devices[i][12]
 
         msg += "<tr>"
-        if self.bool_devicename
+        if dvo_devicename
           msg += format("<td>%s&nbsp</td>", devicename)
         end
-        if self.bool_version
-          msg += format("<td>%s&nbsp</td>", version)
-        end
         msg += format("<td><a target=_blank href='http://%s.'>%s&nbsp</a></td>", hostname, hostname)
-        if self.bool_ipaddress
+        if dvo_ipaddress
           msg += format("<td><a target=_blank href='http://%s'>%s&nbsp</a></td>", ipaddress, ipaddress)
         end
-
-        if int(last_seen) >= (now - self.line_highlight) # Highlight changes within latest seconds
+        if dvo_version
+          msg += format("<td>%s&nbsp</td>", version)
+        end
+        if dvo_heap
+          var iheap = int(heap)                     # Workaround to remove leading zeros
+          msg += format("<td align='right'>%s&nbsp</td>", (iheap > 0) ? str(iheap) : "")
+        end
+        if dvo_berryheap
+          var bheap = int(berryheap)                # Workaround to remove leading zeros
+          msg += format("<td align='right'>%s&nbsp</td>", (bheap > 0) ? str(bheap) : "")
+        end
+        if dvo_berryobject
+          var bobject = int(berryobject)            # Workaround to remove leading zeros
+          msg += format("<td align='right'>%s&nbsp</td>", (bobject > 0) ? str(bobject) : "")
+        end
+        if dvo_wifirssi
+          var wrssi = int(wifirssi)                 # Workaround to remove leading zeros
+          msg += format("<td align='right'>%s%%&nbsp</td>", str(wrssi))
+        end
+        if int(last_seen) >= (now - dvo_time_highlight) # Highlight changes within latest seconds
           msg += format("<td align='right' style='color:%s'>%s</td>", self.line_highlight_color, uptime)
-        elif int(uptime_sec) < self.line_teleperiod  # Highlight changes just after restart
+        elif int(uptime_sec) < dvo_online_window    # Highlight changes just after restart
           msg += format("<td align='right' style='color:%s'>%s</td>", self.line_lowuptime_color, uptime)
         else 
           msg += format("<td align='right'>%s</td>", uptime)
         end
 
         msg += "</tr>"
-        list_index += 1
       end
-      msg += "</table>{t}"                          # Terminate three/four/five column table and open new table: <table style='width:100%'>
-      msg += format("{s}Devices online{m}%d{e}", list_size) # <tr><th>Devices online</th><td style='width:20px;white-space:nowrap'>%d</td></tr>
-
-      msg += "</table><p></p>{t}"                   # Terminate two column table and open new table: <table style='width:100%'>
-      msg += "<td style=\"width:33%\"><button onclick='la(\"&sd_dn=1\");'>Name</button></td>"
-      msg += "<td style=\"width:33%\"><button onclick='la(\"&sd_sw=1\");'>Version</button></td>"
-      msg += "<td style=\"width:33%\"><button onclick='la(\"&sd_ip=1\");'>Address</button></td>"
-      msg += "</table>{t}"                          # Terminate two column table and open new table: <table style='width:100%'>
+      msg += "</table>{t}"                          # Terminate multi-column table and open new table: <table style='width:100%'>
+      msg += format("{s}Devices online{m}%d{e}", devices) # <tr><th>Devices online</th><td style='width:20px;white-space:nowrap'>%d</td></tr>
 
       tasmota.web_send(msg)                         # Do not use tasmota.web_send_decimal() which will replace IPAddress dots
       tasmota.web_send_decimal("")                  # Force horizontal line
@@ -388,5 +600,8 @@ class devices_online
   end
 
 end
+#---------------------------------------------------------------------------------#
+# extension devices_online
+###################################################################################
 
 return devices_online()
