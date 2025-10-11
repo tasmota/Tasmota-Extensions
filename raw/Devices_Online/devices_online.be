@@ -526,6 +526,7 @@ class devices_online
       end
 
       msg += "</tr>"
+      tasmota.web_send(msg)
 
       var list_index = 0
       var devices = 0
@@ -554,7 +555,7 @@ class devices_online
         var heap = self.list_devices[i][11]
         var berryobject = self.list_devices[i][12]
 
-        msg += "<tr>"
+        msg = "<tr>"
         if dvo_devicename
           msg += format("<td>%s&nbsp</td>", devicename)
         end
@@ -590,8 +591,9 @@ class devices_online
         end
 
         msg += "</tr>"
+        tasmota.web_send(msg)
       end
-      msg += "</table>{t}"                          # Terminate multi-column table and open new table: <table style='width:100%'>
+      msg = "</table>{t}"                          # Terminate multi-column table and open new table: <table style='width:100%'>
       msg += format("{s}Devices online{m}%d{e}", devices) # <tr><th>Devices online</th><td style='width:20px;white-space:nowrap'>%d</td></tr>
 
       tasmota.web_send(msg)                         # Do not use tasmota.web_send_decimal() which will replace IPAddress dots
