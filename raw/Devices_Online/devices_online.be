@@ -46,6 +46,7 @@ class dev_online_settings
       persist.dvo_time_highlight = webserver.arg('dvo13')
       persist.dvo_devicename = (webserver.arg('dvo1')) ? 1 : 0
       persist.dvo_ipaddress = (webserver.arg('dvo3')) ? 1 : 0
+      persist.dvo_power = (webserver.arg('dvo8')) ? 1 : 0
       persist.dvo_version = (webserver.arg('dvo2')) ? 1 : 0
       persist.dvo_heap = (webserver.arg('dvo6')) ? 1 : 0
       persist.dvo_berryheap = (webserver.arg('dvo4')) ? 1 : 0
@@ -61,6 +62,7 @@ class dev_online_settings
     var dvo_time_highlight = persist.find("dvo_time_highlight", 10)
     var dvo_devicename = (persist.find("dvo_devicename", 0)) ? " checked" : ""
     var dvo_ipaddress = (persist.find("dvo_ipaddress", 0)) ? " checked" : ""
+    var dvo_power = (persist.find("dvo_power", 0)) ? " checked" : ""
     var dvo_version = (persist.find("dvo_version", 0)) ? " checked" : ""
     var dvo_heap = (persist.find("dvo_heap", 0)) ? " checked" : ""
     var dvo_berryheap = (persist.find("dvo_berryheap", 0)) ? " checked" : ""
@@ -86,6 +88,7 @@ class dev_online_settings
      "<tr><td style=width:40px'><input id='dvo1' name='dvo1' type='checkbox'%s></td><td><b>Device Name</b></td></tr>"
      "<tr><td style=width:40px'> </td><td><b>Hostname</b></td></tr>"
      "<tr><td style=width:40px'><input id='dvo3' name='dvo3' type='checkbox'%s></td><td><b>IP Address</b></td></tr>"
+     "<tr><td style=width:40px'><input id='dvo8' name='dvo8' type='checkbox'%s></td><td><b>Power</b></td></tr>"
      "<tr><td style=width:40px'><input id='dvo2' name='dvo2' type='checkbox'%s></td><td><b>Version</b></td></tr>"
      "<tr><td style=width:40px'><input id='dvo6' name='dvo6' type='checkbox'%s></td><td><b>Heap Free (KB)</b></td></tr>"
      "<tr><td style=width:40px'><input id='dvo4' name='dvo4' type='checkbox'%s></td><td><b>Berry Heap Usage (KB)</b></td></tr>"
@@ -98,7 +101,7 @@ class dev_online_settings
      "<button name='save' type='submit' class='button bgrn'>Save</button>"
      "</form>"
      "</fieldset>", dvo_lines, dvo_online_window, dvo_time_highlight,
-     dvo_devicename, dvo_ipaddress, dvo_version, dvo_heap, dvo_berryheap, dvo_berryobject, dvo_wifirssi))
+     dvo_devicename, dvo_ipaddress, dvo_power, dvo_version, dvo_heap, dvo_berryheap, dvo_berryobject, dvo_wifirssi))
 
     webserver.content_button(webserver.BUTTON_CONFIGURATION) #- button back to conf page -#
     webserver.content_stop()                                 #- end of web page -#
@@ -139,6 +142,7 @@ class devices_online
       persist.dvo_time_highlight = 10               # Highlight latest change duration in seconds
       persist.dvo_devicename = 0                    # Show device name
       persist.dvo_ipaddress = 0                     # Show IP address
+      persist.dvo_power = 0                         # Show power
       persist.dvo_version = 0                       # Show version
       persist.dvo_heap = 0                          # Show Heap (KB)
       persist.dvo_berryheap = 0                     # Show Berry HeapUsed (KB)
@@ -242,9 +246,10 @@ class devices_online
       var berryheap = " "
       var berryobject = " "
       var wifirssi = " "
+      var power = []
 
-      #           0      1         2          3           4        5            6          7       8           9          10        11    12
-      var line = [topic, hostname, ipaddress, devicename, version, version_num, last_seen, uptime, uptime_sec, berryheap, wifirssi, heap, berryobject]
+      #           0      1         2          3           4        5            6          7       8           9          10        11    12           13
+      var line = [topic, hostname, ipaddress, devicename, version, version_num, last_seen, uptime, uptime_sec, berryheap, wifirssi, heap, berryobject, power]
       var update = 0;
       for i: self.list_devices.keys()
         if self.list_devices[i][0] == topic
@@ -256,9 +261,10 @@ class devices_online
             wifirssi = self.list_devices[i][10]
             heap = self.list_devices[i][11]
             berryobject = self.list_devices[i][12]
+            power = self.list_devices[i][13]
           end  
 #          log(f"DVO: Discovery --- update {self.list_devices[i]}", 3)
-          var update_line = [topic, hostname, ipaddress, devicename, version, version_num, last_seen, uptime, uptime_sec, berryheap, wifirssi, heap, berryobject]
+          var update_line = [topic, hostname, ipaddress, devicename, version, version_num, last_seen, uptime, uptime_sec, berryheap, wifirssi, heap, berryobject, power]
 #          log(f"DVO: Discovery +++ update {update_line}", 3)
           self.list_devices[i] = update_line        # Update current config
           break
@@ -314,6 +320,24 @@ class devices_online
           ipaddress = state['IPAddress']            # 192.168.2.208
         end
 
+        var power = []                              # [0]
+        var power_state = ""
+        for i: 1..4
+          if i == 1
+            if state.find("POWER")
+              power_state = state["POWER"]
+            end
+          end
+          var keystr = f"POWER{i}"
+          if state.find(keystr)
+            power_state = state[keystr]
+          end
+          if size(power_state)
+            power.push((power_state == "OFF") ? 0 : 1)
+            power_state = ""
+          end
+        end
+
         var last_seen = str(tasmota.rtc('local'))
         var uptime = state['Uptime']                # 0T00:15:09
         var uptime_sec_int
@@ -354,8 +378,8 @@ class devices_online
         end
         var wifirssi = format("%03i", wrssi)        # 100 - Convert to string to enable multicolumn sort
 
-        #           0      1         2          3           4        5            6          7       8           9          10        11    12
-        var line = [topic, hostname, ipaddress, devicename, version, version_num, last_seen, uptime, uptime_sec, berryheap, wifirssi, heap, berryobject]
+        #           0      1         2          3           4        5            6          7       8           9          10        11    12           13
+        var line = [topic, hostname, ipaddress, devicename, version, version_num, last_seen, uptime, uptime_sec, berryheap, wifirssi, heap, berryobject, power]
 
         var dvo_online_window = int(persist.find("dvo_online_window", 600))
         var time_window = int(last_seen) - dvo_online_window
@@ -441,6 +465,36 @@ class devices_online
       end
       self.sort_last_column = persist.dvo_column
       persist.save()
+    elif webserver.has_arg("sd_pow")
+      var power_splits = string.split(webserver.arg("sd_pow"), "_")
+      var topic = power_splits[0]
+      var power = int(power_splits[1])
+      var fulltopic = tasmota.cmd('_FullTopic', true)['FullTopic']
+      var prefix = tasmota.cmd("_Prefix", true)['Prefix1'] # cmnd = Prefix1 used by commands
+      fulltopic = string.replace(fulltopic, "%prefix%", prefix)
+      fulltopic = string.replace(fulltopic, "%topic%", topic)
+      if fulltopic[-1] != '/'
+        fulltopic += '/'
+      end
+
+      var power_state = 0
+      for i: self.list_devices.keys()
+        # Use topic as line index may have changed since GUI sd_pow was initiated
+        if self.list_devices[i][0] == topic
+          # We do not want to subscribe to power response so ...
+          # we need some abracadabra as direct manipulation ends in exception
+          var power_list = self.list_devices[i][13]
+          power_state = power_list[power -1] ^ 1    # Toggle state
+          power_list[power -1] = power_state
+          self.list_devices[i][13] = power_list
+
+#          log(format("DVO: publish %sPOWER%d %d", fulltopic, power, power_state), 3)
+
+#          tasmota.cmd(format("publish %sPOWER%d 2", fulltopic, power), true)
+          tasmota.cmd(format("publish %sPOWER%d %d", fulltopic, power, power_state), true)
+          break;
+        end
+      end
     end
 
     if self.list_devices.size()
@@ -449,6 +503,7 @@ class devices_online
       var dvo_time_highlight = int(persist.find("dvo_time_highlight", 10))
       var dvo_devicename = persist.find("dvo_devicename", 0)
       var dvo_ipaddress = persist.find("dvo_ipaddress", 0)
+      var dvo_power = persist.find("dvo_power", 0)
       var dvo_version = persist.find("dvo_version", 0)
       var dvo_heap = persist.find("dvo_heap", 0)
       var dvo_berryheap = persist.find("dvo_berryheap", 0)
@@ -468,6 +523,9 @@ class devices_online
         if dvo_ipaddress
           msg += "<th>IP Address&nbsp</th>"
         end
+        if dvo_power
+          msg += "<th>Power&nbsp</th>"
+        end
         if dvo_version
           msg += "<th>Version&nbsp</th>"
         end
@@ -485,8 +543,8 @@ class devices_online
         end
         msg += "<th align='right'>Uptime&nbsp</th>"
       else                                          # All devices sorted by user selected column
-        #               0  1  2              3               4  5            6  7  8  9              10            11        12
-        var list_dvo = [0, 1, dvo_ipaddress, dvo_devicename, 0, dvo_version, 0, 0, 1, dvo_berryheap, dvo_wifirssi, dvo_heap, dvo_berryobject]
+        #               0  1  2              3               4  5            6  7  8  9              10            11        12               13
+        var list_dvo = [0, 1, dvo_ipaddress, dvo_devicename, 0, dvo_version, 0, 0, 1, dvo_berryheap, dvo_wifirssi, dvo_heap, dvo_berryobject, 0]
         if persist.dvo_column >= list_dvo.size() || list_dvo[persist.dvo_column] == 0
           persist.dvo_column = 1                    # Hostname as default sort column
           self.sort_last_column = persist.dvo_column
@@ -506,6 +564,9 @@ class devices_online
         msg += format("<th><a href='#p' onclick='la(\"&sd_sort=1\");'>Hostname</a>%s&nbsp</th>", persist.dvo_column == 1 ? icon_direction : "")
         if dvo_ipaddress
           msg += format("<th><a href='#p' onclick='la(\"&sd_sort=2\");'>IP Address</a>%s&nbsp</th>", persist.dvo_column == 2 ? icon_direction : "")
+        end
+        if dvo_power
+          msg += format("<th>Power&nbsp</th>")
         end
         if dvo_version
           msg += format("<th><a href='#p' onclick='la(\"&sd_sort=5\");'>Version</a>%s&nbsp</th>", persist.dvo_column == 5 ? icon_direction : "")
@@ -532,8 +593,8 @@ class devices_online
       var devices = 0
       var now = tasmota.rtc('local')
       for i: self.list_devices.keys()
-        #  0      1         2          3           4        5            6          7       8           9          10        11    12
-        # [topic, hostname, ipaddress, devicename, version, version_num, last_seen, uptime, uptime_sec, berryheap, wifirssi, heap, berryobject]
+        #  0      1         2          3           4        5            6          7       8           9          10        11    12           13
+        # [topic, hostname, ipaddress, devicename, version, version_num, last_seen, uptime, uptime_sec, berryheap, wifirssi, heap, berryobject, power]
         var uptime = self.list_devices[i][7]
         if uptime == " " continue end               # No STATE info
 
@@ -544,6 +605,7 @@ class devices_online
           if list_index > dvo_lines continue end    # Keep counting devices
         end
 
+        var topic = self.list_devices[i][0]
         var hostname = self.list_devices[i][1]
         var ipaddress = self.list_devices[i][2]
         var devicename = self.list_devices[i][3]
@@ -554,6 +616,7 @@ class devices_online
         var wifirssi = self.list_devices[i][10]
         var heap = self.list_devices[i][11]
         var berryobject = self.list_devices[i][12]
+        var power = self.list_devices[i][13]
 
         msg = "<tr>"
         if dvo_devicename
@@ -562,6 +625,18 @@ class devices_online
         msg += format("<td><a target=_blank href='http://%s.'>%s&nbsp</a></td>", hostname, hostname)
         if dvo_ipaddress
           msg += format("<td><a target=_blank href='http://%s'>%s&nbsp</a></td>", ipaddress, ipaddress)
+        end
+        if dvo_power
+          if power.size()
+            msg += "<td>"
+            for p: power.keys()
+              msg += format("<a href='#p'%s title='Toggle POWER%d' onclick='la(\"&sd_pow=%s_%d\");'>%s&nbsp</a>",
+                            (power[p]) ? " style='color:lime;'" : "", p +1, topic, p +1, (power[p]) ? "&#x2612" : "&#x2610")
+            end
+            msg += "</td>"
+          else
+            msg += "<td>&nbsp</td>"
+          end
         end
         if dvo_version
           msg += format("<td>%s&nbsp</td>", version)
