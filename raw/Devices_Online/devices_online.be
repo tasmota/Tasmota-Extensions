@@ -44,6 +44,7 @@ class dev_online_settings
       persist.dvo_lines = webserver.arg('dvo11')
       persist.dvo_online_window = webserver.arg('dvo12')
       persist.dvo_time_highlight = webserver.arg('dvo13')
+      persist.dvo_hostname_suffix = webserver.arg('dvo14')
       persist.dvo_devicename = (webserver.arg('dvo1')) ? 1 : 0
       persist.dvo_ipaddress = (webserver.arg('dvo3')) ? 1 : 0
       persist.dvo_power = (webserver.arg('dvo8')) ? 1 : 0
@@ -60,6 +61,7 @@ class dev_online_settings
     var dvo_lines = persist.find("dvo_lines", 0)
     var dvo_online_window = persist.find("dvo_online_window", 600)
     var dvo_time_highlight = persist.find("dvo_time_highlight", 10)
+    var dvo_hostname_suffix = persist.find("dvo_hostname_suffix", "")
     var dvo_devicename = (persist.find("dvo_devicename", 0)) ? " checked" : ""
     var dvo_ipaddress = (persist.find("dvo_ipaddress", 0)) ? " checked" : ""
     var dvo_power = (persist.find("dvo_power", 0)) ? " checked" : ""
@@ -81,6 +83,7 @@ class dev_online_settings
      "<tr><td style='width:260px'><b>Scroll display lines</b></td><td style='width:70px'><input id='dvo11' name='dvo11' type='number' min='0' max='60' step='2' value='%s'></td></tr>"
      "<tr><td style='width:260px'><b>Online window (sec)</b></td><td style='width:70px'><input id='dvo12' name='dvo12' type='number' min='300' max='1000' step='30' value='%s'></td></tr>"
      "<tr><td style='width:260px'><b>Highlight refreshed (sec)</b></td><td style='width:70px'><input id='dvo13' name='dvo13' type='number' min='10' max='60' step='2' value='%s'></td></tr>"
+     "<tr><td style='width:260px'><b>Hostname suffix</b></td><td style='width:70px'><input id='dvo14' name='dvo14' value='%s'></td></tr>"
      "</table>"
      "<p></p>"
      "<fieldset><legend><b>&nbsp;Columns Shown&nbsp;</b></legend>"
@@ -100,7 +103,7 @@ class dev_online_settings
      "<br>"
      "<button name='save' type='submit' class='button bgrn'>Save</button>"
      "</form>"
-     "</fieldset>", dvo_lines, dvo_online_window, dvo_time_highlight,
+     "</fieldset>", dvo_lines, dvo_online_window, dvo_time_highlight, dvo_hostname_suffix,
      dvo_devicename, dvo_ipaddress, dvo_power, dvo_version, dvo_heap, dvo_berryheap, dvo_berryobject, dvo_wifirssi))
 
     webserver.content_button(webserver.BUTTON_CONFIGURATION) #- button back to conf page -#
@@ -137,6 +140,7 @@ class devices_online
       persist.dvo_lines = 0                         # Show growing list of devices
       persist.dvo_online_window = 600               # Number of teleperiod seconds for devices to be shown as online
       persist.dvo_time_highlight = 10               # Highlight latest change duration in seconds
+      persist.dvo_hostname_suffix = ""              # Optional hostname suffix like "."
       persist.dvo_devicename = 0                    # Show device name
       persist.dvo_ipaddress = 0                     # Show IP address
       persist.dvo_power = 0                         # Show power
@@ -498,6 +502,7 @@ class devices_online
       var dvo_online_window = int(persist.find("dvo_online_window", 600))
       var dvo_lines = int(persist.find("dvo_lines", 0))
       var dvo_time_highlight = int(persist.find("dvo_time_highlight", 10))
+      var dvo_hostname_suffix = persist.find("dvo_hostname_suffix", "")
       var dvo_devicename = persist.find("dvo_devicename", 0)
       var dvo_ipaddress = persist.find("dvo_ipaddress", 0)
       var dvo_power = persist.find("dvo_power", 0)
@@ -619,7 +624,7 @@ class devices_online
         if dvo_devicename
           msg += format("<td>%s&nbsp</td>", devicename)
         end
-        msg += format("<td><a target=_blank href='http://%s.'>%s&nbsp</a></td>", hostname, hostname)
+        msg += format("<td><a target=_blank href='http://%s%s'>%s&nbsp</a></td>", hostname, dvo_hostname_suffix, hostname)
         if dvo_ipaddress
           msg += format("<td><a target=_blank href='http://%s'>%s&nbsp</a></td>", ipaddress, ipaddress)
         end
