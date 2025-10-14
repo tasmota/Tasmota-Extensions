@@ -120,9 +120,6 @@ end
 # extension devices_online
 #---------------------------------------------------------------------------------#
 class devices_online
-  static var line_highlight_color = "yellow"        # Latest change highlight HTML color like "#FFFF00" or "yellow"
-  static var line_lowuptime_color = "lime"          # Low uptime highlight HTML color like "#00FF00" or "lime"
-
   var mqtt_state                                    # MQTT tele STATE subscribe format
   var mqtt_topic_idx                                # Index of %topic% within full topic
   var mqtt_step                                     # MQTT message state
@@ -631,7 +628,7 @@ class devices_online
             msg += "<td>"
             for p: power.keys()
               msg += format("<a href='#p'%s title='Toggle POWER%d' onclick='la(\"&sd_pow=%s_%d\");'>%s&nbsp</a>",
-                            (power[p]) ? " style='color:lime;'" : "", p +1, topic, p +1, (power[p]) ? "&#x2612" : "&#x2610")
+                            (power[p]) ? " style='color:var(--c_txtscc);'" : "", p +1, topic, p +1, (power[p]) ? "&#x2612" : "&#x2610")
             end
             msg += "</td>"
           else
@@ -658,9 +655,9 @@ class devices_online
           msg += format("<td align='right'>%s%%&nbsp</td>", str(wrssi))
         end
         if int(last_seen) >= (now - dvo_time_highlight) # Highlight changes within latest seconds
-          msg += format("<td align='right' style='color:%s'>%s</td>", self.line_highlight_color, uptime)
+          msg += format("<td align='right' style='color:var(--c_txtscc);'>%s</td>", uptime)
         elif int(uptime_sec) < dvo_online_window    # Highlight changes just after restart
-          msg += format("<td align='right' style='color:%s'>%s</td>", self.line_lowuptime_color, uptime)
+          msg += format("<td align='right' style='color:var(--c_txtwrn);'>%s</td>", uptime)
         else 
           msg += format("<td align='right'>%s</td>", uptime)
         end
