@@ -655,7 +655,7 @@ class devices_online
           msg += format("<td align='right'>%s%%&nbsp</td>", str(wrssi))
         end
         if int(last_seen) >= (now - dvo_time_highlight) # Highlight changes within latest seconds
-          msg += format("<td align='right' style='color:var(--c_txtscc);'>%s</td>", uptime)
+          msg += format("<td align='right' style='color:var(--c_btnsv);'>%s</td>", uptime)
         elif int(uptime_sec) < dvo_online_window    # Highlight changes just after restart
           msg += format("<td align='right' style='color:var(--c_txtwrn);'>%s</td>", uptime)
         else 
