@@ -1,8 +1,17 @@
 ###################################################################################
-# Display in Main GUI Devices Online based on MQTT Tasmota Discovery Config and STATE reports
+# devices_online.be - ESP32 Extension for Tasmota
 #
-# Copyright (C) 2025  Stephan Hadinger & Theo Arends
+# SPDX-FileCopyrightText: 2025 Stephan Hadinger & Theo Arends
 #
+# SPDX-License-Identifier: GPL-3.0-only
+###################################################################################
+# Display in Main GUI Devices Online based on non-invasive MQTT information from 
+#  retained Tasmota Discovery Config and STATE reports.
+# Enable Tasmota Discovery with command `SetOption19 0`.
+# For realtime power control do execute once command `SetOption59 1` on every
+#  online device (ex. `publish cmnd/tasmotas/so59 1`).
+#  This will send a STATE report on every POWER change.
+###################################################################################
 # rm Devices_Online.tapp; zip -j -0 Devices_Online.tapp Devices_Online/*
 ###################################################################################
 
@@ -53,6 +62,7 @@ class dev_online_settings
       persist.dvo_berryheap = (webserver.arg('dvo4')) ? 1 : 0
       persist.dvo_berryobject = (webserver.arg('dvo7')) ? 1 : 0
       persist.dvo_wifirssi = (webserver.arg('dvo5')) ? 1 : 0
+      persist.dvo_wifichnl = (webserver.arg('dvo9')) ? 1 : 0
       persist.save()
 
       webserver.redirect("/cn?")                    # Go back to Configuration menu
@@ -70,41 +80,92 @@ class dev_online_settings
     var dvo_berryheap = (persist.find("dvo_berryheap", 0)) ? " checked" : ""
     var dvo_berryobject = (persist.find("dvo_berryobject", 0)) ? " checked" : ""
     var dvo_wifirssi = (persist.find("dvo_wifirssi", 0)) ? " checked" : ""
+    var dvo_wifichnl = (persist.find("dvo_wifichnl", 0)) ? " checked" : ""
 
     webserver.content_start("DevOnline")            #- title of the web page -#
     webserver.content_send_style()                  #- send standard Tasmota styles -#
 
     webserver.content_send(
-    format("<fieldset>"
-     "<legend><b>&nbsp;Devices Online&nbsp;</b></legend>"
-     "<form method='get' action='dvo'>"
-     "<p></p>"
-     "<table>"
-     "<tr><td style='width:260px'><b>Scroll display lines</b></td><td style='width:70px'><input id='dvo11' name='dvo11' type='number' min='0' max='60' step='2' value='%s'></td></tr>"
-     "<tr><td style='width:260px'><b>Online window (sec)</b></td><td style='width:70px'><input id='dvo12' name='dvo12' type='number' min='300' max='1000' step='30' value='%s'></td></tr>"
-     "<tr><td style='width:260px'><b>Highlight refreshed (sec)</b></td><td style='width:70px'><input id='dvo13' name='dvo13' type='number' min='10' max='60' step='2' value='%s'></td></tr>"
-     "<tr><td style='width:260px'><b>Hostname suffix</b></td><td style='width:70px'><input id='dvo14' name='dvo14' value='%s'></td></tr>"
-     "</table>"
-     "<p></p>"
-     "<fieldset><legend><b>&nbsp;Columns Shown&nbsp;</b></legend>"
-     "<table>"
-     "<tr><td style=width:40px'><input id='dvo1' name='dvo1' type='checkbox'%s></td><td><label for='dvo1'><b>Device Name</b></label></td></tr>"
-     "<tr><td style=width:40px'> </td><td><b>Hostname</b></td></tr>"
-     "<tr><td style=width:40px'><input id='dvo3' name='dvo3' type='checkbox'%s></td><td><label for='dvo3'><b>IP Address</b></label></td></tr>"
-     "<tr><td style=width:40px'><input id='dvo8' name='dvo8' type='checkbox'%s></td><td><label for='dvo8'><b>Power Control</b></label></td></tr>"
-     "<tr><td style=width:40px'><input id='dvo2' name='dvo2' type='checkbox'%s></td><td><label for='dvo2'><b>Version</b></label></td></tr>"
-     "<tr><td style=width:40px'><input id='dvo6' name='dvo6' type='checkbox'%s></td><td><label for='dvo6'><b>Heap Free (KB)</b></label></td></tr>"
-     "<tr><td style=width:40px'><input id='dvo4' name='dvo4' type='checkbox'%s></td><td><label for='dvo4'><b>Berry Heap Usage (KB)</b></label></td></tr>"
-     "<tr><td style=width:40px'><input id='dvo7' name='dvo7' type='checkbox'%s></td><td><label for='dvo7'><b>Berry Object Count</b></label></td></tr>"
-     "<tr><td style=width:40px'><input id='dvo5' name='dvo5' type='checkbox'%s></td><td><label for='dvo5'><b>WiFi RSSI</b></label></td></tr>"
-     "<tr><td style=width:40px'> </td><td><b>Uptime</b></td></tr>"
-     "</table>"
-     "</fieldset>"
-     "<br>"
-     "<button name='save' type='submit' class='button bgrn'>Save</button>"
-     "</form>"
-     "</fieldset>", dvo_lines, dvo_online_window, dvo_time_highlight, dvo_hostname_suffix,
-     dvo_devicename, dvo_ipaddress, dvo_power, dvo_version, dvo_heap, dvo_berryheap, dvo_berryobject, dvo_wifirssi))
+     f"<fieldset>"
+        "<legend><b>&nbsp;Devices Online&nbsp;</b></legend>"
+        "<form method='get' action='dvo'>"
+        "<p></p>"
+        "<table>"
+          "<tr>"
+            "<td style='width:260px'><b>Scroll display lines</b></td>"
+            "<td style='width:70px'><input id='dvo11' name='dvo11' type='number' min='0' max='60' step='2' value='{dvo_lines}'></td>"
+          "</tr>"
+          "<tr>"
+            "<td style='width:260px'><b>Online window (sec)</b></td>"
+            "<td style='width:70px'><input id='dvo12' name='dvo12' type='number' min='300' max='1000' step='30' value='{dvo_online_window}'></td>"
+          "</tr>"
+          "<tr>"
+            "<td style='width:260px'><b>Highlight refreshed (sec)</b></td>"
+            "<td style='width:70px'><input id='dvo13' name='dvo13' type='number' min='10' max='60' step='2' value='{dvo_time_highlight}'></td>"
+          "</tr>"
+          "<tr>"
+            "<td style='width:260px'><b>Hostname suffix</b></td>"
+            "<td style='width:70px'><input id='dvo14' name='dvo14' value='{dvo_hostname_suffix}'></td>"
+          "</tr>"
+        "</table>"
+        "<p></p>"
+    )
+
+    webserver.content_send(
+       f"<fieldset>"
+          "<legend><b>&nbsp;Columns Shown&nbsp;</b></legend>"
+          "<table>"
+            "<tr>"
+              "<td style=width:40px'><input id='dvo1' name='dvo1' type='checkbox'{dvo_devicename}></td>"
+              "<td><label for='dvo1'><b>Device Name</b></label></td>"
+            "</tr>"
+            "<tr>"
+              "<td style=width:40px'> </td>"
+              "<td><b>Hostname</b></td>"
+            "</tr>"
+            "<tr>"
+              "<td style=width:40px'><input id='dvo3' name='dvo3' type='checkbox'{dvo_ipaddress}></td>"
+              "<td><label for='dvo3'><b>IP Address</b></label></td>"
+            "</tr>"
+            "<tr>"
+              "<td style=width:40px'><input id='dvo8' name='dvo8' type='checkbox'{dvo_power}></td>"
+              "<td><label for='dvo8'><b>Power Control</b></label></td>"
+            "</tr>"
+            "<tr>"
+              "<td style=width:40px'><input id='dvo2' name='dvo2' type='checkbox'{dvo_version}></td>"
+              "<td><label for='dvo2'><b>Version</b></label></td>"
+            "</tr>"
+            "<tr>"
+              "<td style=width:40px'><input id='dvo6' name='dvo6' type='checkbox'{dvo_heap}></td>"
+              "<td><label for='dvo6'><b>Heap Free (KB)</b></label></td>"
+            "</tr>"
+            "<tr>"
+              "<td style=width:40px'><input id='dvo4' name='dvo4' type='checkbox'{dvo_berryheap}></td>"
+              "<td><label for='dvo4'><b>Berry Heap Usage (KB)</b></label></td>"
+            "</tr>"
+            "<tr>"
+              "<td style=width:40px'><input id='dvo7' name='dvo7' type='checkbox'{dvo_berryobject}></td>"
+              "<td><label for='dvo7'><b>Berry Object Count</b></label></td>"
+            "</tr>"
+            "<tr>"
+              "<td style=width:40px'><input id='dvo5' name='dvo5' type='checkbox'{dvo_wifirssi}></td>"
+              "<td><label for='dvo5'><b>WiFi RSSI</b></label></td>"
+            "</tr>"
+            "<tr>"
+              "<td style=width:40px'><input id='dvo9' name='dvo9' type='checkbox'{dvo_wifichnl}></td>"
+              "<td><label for='dvo9'><b>WiFi Channel</b></label></td>"
+            "</tr>"
+            "<tr>"
+              "<td style=width:40px'> </td>"
+              "<td><b>Uptime</b></td>"
+            "</tr>"
+          "</table>"
+       "</fieldset>"
+       "<br>"
+       "<button name='save' type='submit' class='button bgrn'>Save</button>"
+      "</form>"
+      "</fieldset>"
+    )
 
     webserver.content_button(webserver.BUTTON_CONFIGURATION) #- button back to conf page -#
     webserver.content_stop()                                 #- end of web page -#
@@ -247,10 +308,11 @@ class devices_online
       var berryheap = " "
       var berryobject = " "
       var wifirssi = " "
+      var wifichnl = " "
       var power = []
 
-      #           0      1         2          3           4        5            6          7       8           9          10        11    12           13
-      var line = [topic, hostname, ipaddress, devicename, version, version_num, last_seen, uptime, uptime_sec, berryheap, wifirssi, heap, berryobject, power]
+      #           0      1         2          3           4        5            6          7       8           9          10        11    12           13     14
+      var line = [topic, hostname, ipaddress, devicename, version, version_num, last_seen, uptime, uptime_sec, berryheap, wifirssi, heap, berryobject, power, wifichnl]
       var update = 0;
       for i: self.list_devices.keys()
         if self.list_devices[i][0] == topic
@@ -263,9 +325,10 @@ class devices_online
             heap = self.list_devices[i][11]
             berryobject = self.list_devices[i][12]
             power = self.list_devices[i][13]
+            wifichnl = self.list_devices[i][14]
           end  
 #          log(f"DVO: Discovery --- update {self.list_devices[i]}", 3)
-          var update_line = [topic, hostname, ipaddress, devicename, version, version_num, last_seen, uptime, uptime_sec, berryheap, wifirssi, heap, berryobject, power]
+          var update_line = [topic, hostname, ipaddress, devicename, version, version_num, last_seen, uptime, uptime_sec, berryheap, wifirssi, heap, berryobject, power, wifichnl]
 #          log(f"DVO: Discovery +++ update {update_line}", 3)
           self.list_devices[i] = update_line        # Update current config
           break
@@ -379,8 +442,14 @@ class devices_online
         end
         var wifirssi = format("%03i", wrssi)        # 100 - Convert to string to enable multicolumn sort
 
-        #           0      1         2          3           4        5            6          7       8           9          10        11    12           13
-        var line = [topic, hostname, ipaddress, devicename, version, version_num, last_seen, uptime, uptime_sec, berryheap, wifirssi, heap, berryobject, power]
+        var wchnl = 0
+        if state.find('Wifi') && state['Wifi'].find('Channel')
+          wchnl = state['Wifi']['Channel']          # 11
+        end
+        var wifichnl = format("%03i", wchnl)        # 011 - Convert to string to enable multicolumn sort
+
+        #           0      1         2          3           4        5            6          7       8           9          10        11    12           13     14
+        var line = [topic, hostname, ipaddress, devicename, version, version_num, last_seen, uptime, uptime_sec, berryheap, wifirssi, heap, berryobject, power, wifichnl]
 
         var dvo_online_window = int(persist.find("dvo_online_window", 600))
         var time_window = int(last_seen) - dvo_online_window
@@ -426,28 +495,31 @@ class devices_online
       cmp = /a,b -> a > b                           # Sort down
     end
 
-    if col == 1                                     # Sort hostname as primary key
-      for i:1..size(l)-1                            # Sort string
-        var k = l[i]
-        var ks = k[col]
-        var j = i
-        while (j > 0) && !cmp(l[j-1][col], ks)
-          l[j] = l[j-1]
-          j -= 1
+    for i:1..size(l)-1
+      var k = l[i]
+      var ks = k[col]                               # Needle Primary key
+      if col != 1                                   # Hostname (unique)
+        if col == 14                                # Channel
+          ks += k[10]                               # Needle RSSI
         end
-        l[j] = k
+        ks += k[1]                                  # Needle Hostname (unique)
       end
-    else                                            # Sort any other string using primary and secondary key
-      for i:1..size(l)-1
-        var k = l[i]
-        var ks = k[col] + k[1]                      # Primary search key and Secondary unique search key (hostname)
-        var j = i
-        while (j > 0) && !cmp(l[j-1][col] + l[j-1][1], ks)
-          l[j] = l[j-1]
-          j -= 1
+      var j = i
+      while j > 0
+        var ls = l[j-1][col]                        # Haystack Primary key
+        if col != 1                                 # Hostname (unique)
+          if col == 14                              # Channel
+            ls += l[j-1][10]                        # Haystack RSSI
+          end
+          ls += l[j-1][1]                           # Haystack Hostname (unique)
         end
-        l[j] = k
+        if cmp(ls, ks)
+          break
+        end
+        l[j] = l[j-1]
+        j -= 1
       end
+      l[j] = k
     end
   end
 
@@ -478,6 +550,8 @@ class devices_online
         fulltopic += '/'
       end
 
+      # The following code could be eliminated when `SetOption59 1` was enabled on all
+      #  online devices.
       var power_state = 0
       for i: self.list_devices.keys()
         # Use topic as line index may have changed since GUI sd_pow was initiated
@@ -488,14 +562,12 @@ class devices_online
           power_state = power_list[power -1] ^ 1    # Toggle state
           power_list[power -1] = power_state
           self.list_devices[i][13] = power_list
-
-#          log(format("DVO: publish %sPOWER%d %d", fulltopic, power, power_state), 3)
-
-#          tasmota.cmd(format("publish %sPOWER%d 2", fulltopic, power), true)
           tasmota.cmd(format("publish %sPOWER%d %d", fulltopic, power, power_state), true)
           break;
         end
       end
+      #  it could have been replaced by a simple
+#      tasmota.cmd(format("publish %sPOWER%d 2", fulltopic, power), true)
     end
 
     if self.list_devices.size()
@@ -511,6 +583,7 @@ class devices_online
       var dvo_berryheap = persist.find("dvo_berryheap", 0)
       var dvo_berryobject = persist.find("dvo_berryobject", 0)
       var dvo_wifirssi = persist.find("dvo_wifirssi", 0)
+      var dvo_wifichnl = persist.find("dvo_wifichnl", 0)
 
       var msg = "</table><table style='width:100%;font-size:80%'>" # Terminate two column table and open new table
       msg += "<tr>"
@@ -543,10 +616,13 @@ class devices_online
         if dvo_wifirssi
           msg += "<th align='right'>RSSI&nbsp</th>"
         end
+        if dvo_wifichnl
+          msg += "<th align='right'>Ch&nbsp</th>"
+        end
         msg += "<th align='right'>Uptime&nbsp</th>"
       else                                          # All devices sorted by user selected column
-        #               0  1  2              3               4  5            6  7  8  9              10            11        12               13
-        var list_dvo = [0, 1, dvo_ipaddress, dvo_devicename, 0, dvo_version, 0, 0, 1, dvo_berryheap, dvo_wifirssi, dvo_heap, dvo_berryobject, 0]
+        #               0  1  2              3               4  5            6  7  8  9              10            11        12              13  14
+        var list_dvo = [0, 1, dvo_ipaddress, dvo_devicename, 0, dvo_version, 0, 0, 1, dvo_berryheap, dvo_wifirssi, dvo_heap, dvo_berryobject, 0, dvo_wifichnl]
         if persist.dvo_column >= list_dvo.size() || list_dvo[persist.dvo_column] == 0
           persist.dvo_column = 1                    # Hostname as default sort column
           self.sort_last_column = persist.dvo_column
@@ -585,6 +661,9 @@ class devices_online
         if dvo_wifirssi
           msg += format("<th align='right'><a href='#p' onclick='la(\"&sd_sort=10\");'>RSSI</a>%s&nbsp</th>", persist.dvo_column == 10 ? icon_direction : "")
         end
+        if dvo_wifichnl
+          msg += format("<th align='right'><a href='#p' onclick='la(\"&sd_sort=14\");'>Ch</a>%s&nbsp</th>", persist.dvo_column == 14 ? icon_direction : "")
+        end
         msg += format("<th align='right'><a href='#p' onclick='la(\"&sd_sort=8\");'>Uptime</a>%s&nbsp</th>", persist.dvo_column == 8 ? icon_direction : "")
       end
 
@@ -595,8 +674,8 @@ class devices_online
       var devices = 0
       var now = tasmota.rtc('local')
       for i: self.list_devices.keys()
-        #  0      1         2          3           4        5            6          7       8           9          10        11    12           13
-        # [topic, hostname, ipaddress, devicename, version, version_num, last_seen, uptime, uptime_sec, berryheap, wifirssi, heap, berryobject, power]
+        #  0      1         2          3           4        5            6          7       8           9          10        11    12           13     14
+        # [topic, hostname, ipaddress, devicename, version, version_num, last_seen, uptime, uptime_sec, berryheap, wifirssi, heap, berryobject, power, wifichnl]
         var uptime = self.list_devices[i][7]
         if uptime == " " continue end               # No STATE info
 
@@ -619,6 +698,7 @@ class devices_online
         var heap = self.list_devices[i][11]
         var berryobject = self.list_devices[i][12]
         var power = self.list_devices[i][13]
+        var wifichnl = self.list_devices[i][14]
 
         msg = "<tr>"
         if dvo_devicename
@@ -659,6 +739,10 @@ class devices_online
           var wrssi = int(wifirssi)                 # Workaround to remove leading zeros
           msg += format("<td align='right'>%s%%&nbsp</td>", str(wrssi))
         end
+        if dvo_wifichnl
+          var wchnl = int(wifichnl)                 # Workaround to remove leading zeros
+          msg += format("<td align='right'>%s&nbsp</td>", str(wchnl))
+        end
         if int(last_seen) >= (now - dvo_time_highlight) # Highlight changes within latest seconds
           msg += format("<td align='right' style='color:var(--c_btnsv);'>%s</td>", uptime)
         elif int(uptime_sec) < dvo_online_window    # Highlight changes just after restart
@@ -670,11 +754,9 @@ class devices_online
         msg += "</tr>"
         tasmota.web_send(msg)
       end
-      msg = "</table>{t}"                          # Terminate multi-column table and open new table: <table style='width:100%'>
+      msg = "</table>{t}"                           # Terminate multi-column table and open new table: <table style='width:100%'>
       msg += format("{s}Devices online{m}%d{e}", devices) # <tr><th>Devices online</th><td style='width:20px;white-space:nowrap'>%d</td></tr>
-
-      tasmota.web_send(msg)                         # Do not use tasmota.web_send_decimal() which will replace IPAddress dots
-      tasmota.web_send_decimal("")                  # Force horizontal line
+      tasmota.web_send_decimal(msg)                 # Force horizontal line
     end
   end
 
