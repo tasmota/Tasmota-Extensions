@@ -2,4 +2,4 @@
 {"name":"LVGL Panel","file":"LVGL_Panel.tapp","version":"0x190A0100","description":"Realtime display of the LVGL display in browser","author":"Stephan Hadinger"}
 {"name":"Leds Panel","file":"Leds_Panel.tapp","version":"0x19090100","description":"Realtime display of the WS2812 leds in browser","author":"Stephan Hadinger"}
 {"name":"Partition Wizard","file":"Partition_Wizard.tapp","version":"0x19090100","description":"Wizard for resizing partitions and converting to safeboot layout","author":"Stephan Hadinger"}
-{"name":"Wifi Heap Sticker","file":"Wifi_Heap_Sticker.tapp","version":"0x19090100","description":"Display top left sticker with Wifi strength and memory heap","author":"Stephan Hadinger"}
+{"name":"Wifi Heap Sticker","file":"Wifi_Heap_Sticker.tapp","version":"0x190A0100","description":"Display top left sticker with Wifi strength and memory heap","author":"Stephan Hadinger"}
