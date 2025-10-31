@@ -53,6 +53,7 @@ class dev_online_settings
       persist.dvo_lines = webserver.arg('dvo11')
       persist.dvo_online_window = webserver.arg('dvo12')
       persist.dvo_time_highlight = webserver.arg('dvo13')
+      persist.dvo_offline = webserver.arg('dvo15')
       persist.dvo_hostname_suffix = webserver.arg('dvo14')
       persist.dvo_devicename = (webserver.arg('dvo1')) ? 1 : 0
       persist.dvo_ipaddress = (webserver.arg('dvo3')) ? 1 : 0
@@ -71,6 +72,7 @@ class dev_online_settings
     var dvo_lines = persist.find("dvo_lines", 0)
     var dvo_online_window = persist.find("dvo_online_window", 600)
     var dvo_time_highlight = persist.find("dvo_time_highlight", 10)
+    var dvo_offline = persist.find("dvo_offline", 600)
     var dvo_hostname_suffix = persist.find("dvo_hostname_suffix", "")
     var dvo_devicename = (persist.find("dvo_devicename", 0)) ? " checked" : ""
     var dvo_ipaddress = (persist.find("dvo_ipaddress", 0)) ? " checked" : ""
@@ -92,20 +94,24 @@ class dev_online_settings
         "<p></p>"
         "<table>"
           "<tr>"
-            "<td style='width:260px'><b>Scroll display lines</b></td>"
-            "<td style='width:70px'><input id='dvo11' name='dvo11' type='number' min='0' max='60' step='2' value='{dvo_lines}'></td>"
+            "<td style='width:250px'><b>Scroll display lines</b></td>"
+            "<td style='width:80px'><input id='dvo11' name='dvo11' type='number' min='0' max='60' step='2' value='{dvo_lines}'></td>"
           "</tr>"
           "<tr>"
-            "<td style='width:260px'><b>Online window (sec)</b></td>"
-            "<td style='width:70px'><input id='dvo12' name='dvo12' type='number' min='300' max='1000' step='30' value='{dvo_online_window}'></td>"
+            "<td style='width:250px'><b>Online window (sec)</b></td>"
+            "<td style='width:80px'><input id='dvo12' name='dvo12' type='number' min='300' max='1000' step='30' value='{dvo_online_window}'></td>"
           "</tr>"
           "<tr>"
-            "<td style='width:260px'><b>Highlight refreshed (sec)</b></td>"
-            "<td style='width:70px'><input id='dvo13' name='dvo13' type='number' min='10' max='60' step='2' value='{dvo_time_highlight}'></td>"
+            "<td style='width:250px'><b>Highlight refreshed (sec)</b></td>"
+            "<td style='width:80px'><input id='dvo13' name='dvo13' type='number' min='10' max='60' step='2' value='{dvo_time_highlight}'></td>"
           "</tr>"
           "<tr>"
-            "<td style='width:260px'><b>Hostname suffix</b></td>"
-            "<td style='width:70px'><input id='dvo14' name='dvo14' value='{dvo_hostname_suffix}'></td>"
+            "<td style='width:250px'><b>Keep offline visible (sec)</b></td>"
+            "<td style='width:80px'><input id='dvo15' name='dvo15' type='number' value='{dvo_offline}'></td>"
+          "</tr>"
+          "<tr>"
+            "<td style='width:250px'><b>Hostname suffix</b></td>"
+            "<td style='width:80px'><input id='dvo14' name='dvo14' value='{dvo_hostname_suffix}'></td>"
           "</tr>"
         "</table>"
         "<p></p>"
@@ -201,6 +207,7 @@ class devices_online
       persist.dvo_lines = 0                         # Show growing list of devices
       persist.dvo_online_window = 600               # Number of teleperiod seconds for devices to be shown as online
       persist.dvo_time_highlight = 10               # Highlight latest change duration in seconds
+      persist.dvo_offline = 600                     # Number of seconds for devices to be shown as offline
       persist.dvo_hostname_suffix = ""              # Optional hostname suffix like "."
       persist.dvo_devicename = 0                    # Show device name
       persist.dvo_ipaddress = 0                     # Show IP address
@@ -416,7 +423,7 @@ class devices_online
                            (int(uptime_splits[2]) * 60) +    # 15 * 60
                            int(uptime_splits[3])    # 09 
         end
-        var uptime_sec = format("%011i", uptime_sec_int) # 00000000909 - Convert to string to enable multicolumn sort
+        var uptime_sec = format("%011d", uptime_sec_int) # 00000000909 - Convert to string to enable multicolumn sort
 
         var iheap = 0
         if state.find('Heap')
@@ -452,20 +459,26 @@ class devices_online
         var line = [topic, hostname, ipaddress, devicename, version, version_num, last_seen, uptime, uptime_sec, berryheap, wifirssi, heap, berryobject, power, wifichnl]
 
         var dvo_online_window = int(persist.find("dvo_online_window", 600))
+        var dvo_offline = int(persist.find("dvo_offline", 600))
         var time_window = int(last_seen) - dvo_online_window
+        var time_window_offline = time_window - dvo_offline
         var update = 0;
         var list_size = size(self.list_devices)
         if list_size > 0
           var list_index = 0
           while list_index < list_size              # Use while loop as counter is decremented
-            if update == 0 && self.list_devices[list_index][0] == topic
+            var list_last_seen = int(self.list_devices[list_index][6])
+            var list_heap = int(self.list_devices[list_index][11])
+            if update == 0 && 
+               self.list_devices[list_index][0] == topic
               update = 1
 #              log(f"DVO:     State --- update {self.list_devices[list_index]}", 3)
               self.list_devices[list_index] = line  # Update state
 #              log(f"DVO:     State +++ update {line}", 3)
-            elif time_window > int(self.list_devices[list_index][6]) ||
-              self.list_devices[list_index][1] == hostname ||
-              self.list_devices[list_index][2] == ipaddress
+            elif self.list_devices[list_index][1] == hostname ||      # Remove duplicate hostname
+                 self.list_devices[list_index][2] == ipaddress ||     # Remove duplicate IP address
+                 (list_heap == 0 && time_window > list_last_seen) ||  # Remove offlines never seen
+                 time_window_offline > list_last_seen                 # Remove offlines after user visibility
 #              log(f"DVO:     State --- delete {self.list_devices[list_index]}", 3)
               self.list_devices.remove(list_index)  # Remove duplicates or offline device
               list_size -= 1
@@ -524,6 +537,28 @@ class devices_online
   end
 
   #################################################################################
+  # uptime_to_str(uptime_sec)
+  #
+  # return uptime string like "-0T01:02:03"
+  #################################################################################
+  def uptime_to_str(uptime_sec)
+    var seconds = uptime_sec
+    var sign = ""
+    if seconds < 0
+      sign = "-"
+      seconds *= -1
+    end
+    var days = seconds / 86400
+    seconds -= days * 86400
+    var hours = seconds / 3600
+    seconds -= hours * 3600
+    var minutes = seconds / 60
+    seconds -= minutes * 60
+    var uptime = f"{sign}{days}T{hours:02d}:{minutes:02d}:{seconds:02d}"
+    return uptime
+  end
+
+  #################################################################################
   # web_sensor
   #
   # Display Devices Online in user selected sorted columns
@@ -572,6 +607,7 @@ class devices_online
 
     if self.list_devices.size()
       var dvo_online_window = int(persist.find("dvo_online_window", 600))
+      var dvo_offline = int(persist.find("dvo_offline", 600))
       var dvo_lines = int(persist.find("dvo_lines", 0))
       var dvo_time_highlight = int(persist.find("dvo_time_highlight", 10))
       var dvo_hostname_suffix = persist.find("dvo_hostname_suffix", "")
@@ -671,7 +707,8 @@ class devices_online
       tasmota.web_send(msg)
 
       var list_index = 0
-      var devices = 0
+      var devices_online = 0
+      var devices_offline = 0
       var now = tasmota.rtc('local')
       for i: self.list_devices.keys()
         #  0      1         2          3           4        5            6          7       8           9          10        11    12           13     14
@@ -679,7 +716,7 @@ class devices_online
         var uptime = self.list_devices[i][7]
         if uptime == " " continue end               # No STATE info
 
-        devices += 1
+        devices_online += 1
 
         if dvo_lines
           list_index += 1
@@ -700,20 +737,42 @@ class devices_online
         var power = self.list_devices[i][13]
         var wifichnl = self.list_devices[i][14]
 
+        var offline = (dvo_offline > 0) && (int(last_seen) < (now - dvo_online_window))
+        var color = ""                              # Default text color (this keeps refresh page size small)
+        if offline
+          devices_online -= 1
+          devices_offline += 1
+          color = " style='color:var(--c_tab);'"    # Offline color (this increases page size)
+          var uptime_sec_int = int(last_seen) - now # Negative
+          uptime_sec = format("%011d", uptime_sec_int) # Convert to string to enable multicolumn sort
+          self.list_devices[i][8] = uptime_sec
+          uptime = self.uptime_to_str(uptime_sec_int)
+          self.list_devices[i][7] = uptime
+        end
+
         msg = "<tr>"
         if dvo_devicename
-          msg += format("<td>%s&nbsp</td>", devicename)
+          msg += f"<td{color}>{devicename}&nbsp</td>"
         end
-        msg += format("<td><a target=_blank href='http://%s%s'>%s&nbsp</a></td>", hostname, dvo_hostname_suffix, hostname)
+        if offline
+          msg += f"<td{color}>{hostname}&nbsp</td>"
+        else
+          msg += f"<td><a target=_blank href='http://{hostname}{dvo_hostname_suffix}'>{hostname}&nbsp</a></td>"
+        end
         if dvo_ipaddress
-          msg += format("<td><a target=_blank href='http://%s'>%s&nbsp</a></td>", ipaddress, ipaddress)
+          if offline
+            msg += f"<td{color}>{ipaddress}&nbsp</td>"
+          else
+            msg += f"<td><a target=_blank href='http://{ipaddress}'>{ipaddress}&nbsp</a></td>"
+          end
         end
         if dvo_power
-          if power.size()
+          if !offline && power.size()
             msg += "<td>"
             for p: power.keys()
-              msg += format("<a href='#p'%s title='Toggle POWER%d' onclick='la(\"&sd_pow=%s_%d\");'>%s&nbsp</a>",
-                            (power[p]) ? " style='color:var(--c_txtscc);'" : "", p +1, topic, p +1, (power[p]) ? "&#x2612" : "&#x2610")
+              var hcolor = (power[p]) ? "txtscc" : "btn"
+              var picon = (power[p]) ? "&#x2612" : "&#x2610"
+              msg += f"<a href='#p' style='color:var(--c_{hcolor});' title='Toggle POWER{p +1}' onclick='la(\"&sd_pow={topic}_{p +1}\");'>{picon}&nbsp</a>"
             end
             msg += "</td>"
           else
@@ -721,41 +780,53 @@ class devices_online
           end
         end
         if dvo_version
-          msg += format("<td>%s&nbsp</td>", version)
+          msg += f"<td{color}>{version}&nbsp</td>"
         end
+        var svar
         if dvo_heap
           var iheap = int(heap)                     # Workaround to remove leading zeros
-          msg += format("<td align='right'>%s&nbsp</td>", (iheap > 0) ? str(iheap) : "")
+          svar = (iheap > 0) ? str(iheap) : ""
+          msg += f"<td align='right'{color}>{svar}&nbsp</td>"
         end
         if dvo_berryheap
           var bheap = int(berryheap)                # Workaround to remove leading zeros
-          msg += format("<td align='right'>%s&nbsp</td>", (bheap > 0) ? str(bheap) : "")
+          svar = (bheap > 0) ? str(bheap) : ""
+          msg += f"<td align='right'{color}>{svar}&nbsp</td>"
         end
         if dvo_berryobject
           var bobject = int(berryobject)            # Workaround to remove leading zeros
-          msg += format("<td align='right'>%s&nbsp</td>", (bobject > 0) ? str(bobject) : "")
+          svar = (bobject > 0) ? str(bobject) : ""
+          msg += f"<td align='right'{color}>{svar}&nbsp</td>"
         end
         if dvo_wifirssi
           var wrssi = int(wifirssi)                 # Workaround to remove leading zeros
-          msg += format("<td align='right'>%s%%&nbsp</td>", str(wrssi))
+          svar = str(wrssi)
+          msg += f"<td align='right'{color}>{svar}%&nbsp</td>"
         end
         if dvo_wifichnl
           var wchnl = int(wifichnl)                 # Workaround to remove leading zeros
-          msg += format("<td align='right'>%s&nbsp</td>", str(wchnl))
+          svar = str(wchnl)
+          msg += f"<td align='right'{color}>{svar}&nbsp</td>"
         end
-        if int(last_seen) >= (now - dvo_time_highlight) # Highlight changes within latest seconds
-          msg += format("<td align='right' style='color:var(--c_btnsv);'>%s</td>", uptime)
-        elif int(uptime_sec) < dvo_online_window    # Highlight changes just after restart
-          msg += format("<td align='right' style='color:var(--c_txtwrn);'>%s</td>", uptime)
-        else 
-          msg += format("<td align='right'>%s</td>", uptime)
+        if !offline
+          if int(last_seen) >= (now - dvo_time_highlight) # Highlight changes within latest seconds
+            color = " style='color:var(--c_btnsv);'"
+          elif int(uptime_sec) < dvo_online_window  # Highlight changes just after restart
+            color = " style='color:var(--c_txtwrn);'"
+          end
         end
+        msg += f"<td align='right'{color}>{uptime}</td>"
 
         msg += "</tr>"
         tasmota.web_send(msg)
       end
       msg = "</table>{t}"                           # Terminate multi-column table and open new table: <table style='width:100%'>
-      msg += format("{s}Devices online{m}%d{e}", devices) # <tr><th>Devices online</th><td style='width:20px;white-space:nowrap'>%d</td></tr>
+      msg += f"{{s}}Devices</th><td align='right'>{devices_online} online"
+      if devices_offline
+        msg += f" / {devices_offline} offline"
+      end
+      msg += "{e}{t}"                               # Terminate multi-column table and open new table: <table style='width:100%'>
+
       tasmota.web_send_decimal(msg)                 # Force horizontal line
     end
   end
