@@ -193,6 +193,7 @@ class devices_online
   var mqtt_state                                    # MQTT tele STATE subscribe format
   var mqtt_topic_idx                                # Index of %topic% within full topic
   var mqtt_step                                     # MQTT message state
+  var every_second_counter
   var sort_last_column                              # Sort last column
   var list_devices                                  # Buffer storing devices
   var dvo_settings
@@ -222,6 +223,7 @@ class devices_online
       persist.save()
     end
     self.sort_last_column = persist.dvo_column      # Sort last column to detect direction toggle
+    self.every_second_counter = 0
 
     self.list_devices = []                          # Init device buffer list
 
@@ -498,6 +500,70 @@ class devices_online
   end
 
   #################################################################################
+  # uptime_to_str(uptime_sec_int)
+  #
+  # return uptime string like "-0T01:02:03"
+  #################################################################################
+  def uptime_to_str(uptime_sec_int)
+    var seconds = uptime_sec_int
+    var sign = ""
+    if seconds < 0
+      sign = "-"
+      seconds *= -1
+    end
+    var days = seconds / 86400
+    seconds -= days * 86400
+    var hours = seconds / 3600
+    seconds -= hours * 3600
+    var minutes = seconds / 60
+    seconds -= minutes * 60
+    var uptime = f"{sign}{days}T{hours:02d}:{minutes:02d}:{seconds:02d}"
+    return uptime
+  end
+
+  #################################################################################
+  # every_second()
+  #
+  # Update offline devices
+  #################################################################################
+  def every_second()
+    if self.mqtt_step < 2 return end                # Do not do anything until discovery is complete
+
+    self.every_second_counter += 1
+    if self.every_second_counter >= 60
+      self.every_second_counter = 0
+
+      # Update visible offline devices
+      var dvo_offline = int(persist.find("dvo_offline", 600))
+      if (dvo_offline > 0)
+        var dvo_online_window = int(persist.find("dvo_online_window", 600))
+        var now = tasmota.rtc('local')
+        for i: self.list_devices.keys()
+          #  0      1         2          3           4        5            6          7       8           9          10        11    12           13     14
+          # [topic, hostname, ipaddress, devicename, version, version_num, last_seen, uptime, uptime_sec, berryheap, wifirssi, heap, berryobject, power, wifichnl]
+          var uptime = self.list_devices[i][7]
+          if uptime == " " continue end             # No STATE info
+
+          var last_seen = self.list_devices[i][6]
+          var uptime_sec = self.list_devices[i][8]
+          var uptime_sec_int = int(uptime_sec)    
+          if uptime_sec_int < 0                     # Device is offline visible
+            uptime_sec_int -= 60
+          elif int(last_seen) < (now - dvo_online_window)
+            uptime_sec_int = int(last_seen) - now   # Negative
+          end
+          if uptime_sec_int < 0
+            self.list_devices[i][8] = format("%011d", uptime_sec_int) # Convert to string to enable multicolumn sort
+            self.list_devices[i][7] = self.uptime_to_str(uptime_sec_int)
+            self.list_devices[i][6] = str(now)
+          end
+        end
+      end
+
+    end
+  end
+
+  #################################################################################
   # sort_col(l, col, dir)
   #
   # Shell sort list of online devices based on user selected column and direction
@@ -534,28 +600,6 @@ class devices_online
       end
       l[j] = k
     end
-  end
-
-  #################################################################################
-  # uptime_to_str(uptime_sec)
-  #
-  # return uptime string like "-0T01:02:03"
-  #################################################################################
-  def uptime_to_str(uptime_sec)
-    var seconds = uptime_sec
-    var sign = ""
-    if seconds < 0
-      sign = "-"
-      seconds *= -1
-    end
-    var days = seconds / 86400
-    seconds -= days * 86400
-    var hours = seconds / 3600
-    seconds -= hours * 3600
-    var minutes = seconds / 60
-    seconds -= minutes * 60
-    var uptime = f"{sign}{days}T{hours:02d}:{minutes:02d}:{seconds:02d}"
-    return uptime
   end
 
   #################################################################################
@@ -716,7 +760,13 @@ class devices_online
         var uptime = self.list_devices[i][7]
         if uptime == " " continue end               # No STATE info
 
-        devices_online += 1
+        var uptime_sec = self.list_devices[i][8]
+        var offline = int(uptime_sec) < 0
+        if offline
+          devices_offline += 1
+        else
+          devices_online += 1
+        end
 
         if dvo_lines
           list_index += 1
@@ -729,7 +779,6 @@ class devices_online
         var devicename = self.list_devices[i][3]
         var version = self.list_devices[i][4]
         var last_seen = self.list_devices[i][6]
-        var uptime_sec = self.list_devices[i][8]
         var berryheap = self.list_devices[i][9]
         var wifirssi = self.list_devices[i][10]
         var heap = self.list_devices[i][11]
@@ -737,17 +786,9 @@ class devices_online
         var power = self.list_devices[i][13]
         var wifichnl = self.list_devices[i][14]
 
-        var offline = (dvo_offline > 0) && (int(last_seen) < (now - dvo_online_window))
         var color = ""                              # Default text color (this keeps refresh page size small)
         if offline
-          devices_online -= 1
-          devices_offline += 1
           color = " style='color:var(--c_tab);'"    # Offline color (this increases page size)
-          var uptime_sec_int = int(last_seen) - now # Negative
-          uptime_sec = format("%011d", uptime_sec_int) # Convert to string to enable multicolumn sort
-          self.list_devices[i][8] = uptime_sec
-          uptime = self.uptime_to_str(uptime_sec_int)
-          self.list_devices[i][7] = uptime
         end
 
         msg = "<tr>"
@@ -808,12 +849,10 @@ class devices_online
           svar = str(wchnl)
           msg += f"<td align='right'{color}>{svar}&nbsp</td>"
         end
-        if !offline
-          if int(last_seen) >= (now - dvo_time_highlight) # Highlight changes within latest seconds
-            color = " style='color:var(--c_btnsv);'"
-          elif int(uptime_sec) < dvo_online_window  # Highlight changes just after restart
-            color = " style='color:var(--c_txtwrn);'"
-          end
+        if int(last_seen) >= (now - dvo_time_highlight) # Highlight changes within latest seconds
+          color = " style='color:var(--c_btnsv);'"
+        elif int(uptime_sec) < dvo_online_window  # Highlight changes just after restart
+          color = " style='color:var(--c_txtwrn);'"
         end
         msg += f"<td align='right'{color}>{uptime}</td>"
 
