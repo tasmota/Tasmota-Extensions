@@ -864,7 +864,7 @@ class devices_online
       if devices_offline
         msg += f" / {devices_offline} offline"
       end
-      msg += "{e}{t}"                               # Terminate multi-column table and open new table: <table style='width:100%'>
+      msg += "{e}</table>{t}"                       # Terminate multi-column table and open new table: <table style='width:100%'>
 
       tasmota.web_send_decimal(msg)                 # Force horizontal line
     end
