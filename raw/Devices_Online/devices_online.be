@@ -53,7 +53,7 @@ class dev_online_settings
       persist.dvo_lines = webserver.arg('dvo11')
       persist.dvo_online_window = webserver.arg('dvo12')
       persist.dvo_time_highlight = webserver.arg('dvo13')
-      persist.dvo_offline = webserver.arg('dvo15')
+      persist.dvo_offline = str(int(webserver.arg('dvo15')))  # Only allow numbers
       persist.dvo_hostname_suffix = webserver.arg('dvo14')
       persist.dvo_devicename = (webserver.arg('dvo1')) ? 1 : 0
       persist.dvo_ipaddress = (webserver.arg('dvo3')) ? 1 : 0
@@ -107,7 +107,7 @@ class dev_online_settings
           "</tr>"
           "<tr>"
             "<td style='width:250px'><b>Keep offline visible (sec)</b></td>"
-            "<td style='width:80px'><input id='dvo15' name='dvo15' type='number' value='{dvo_offline}'></td>"
+            "<td style='width:80px'><input id='dvo15' name='dvo15' value='{dvo_offline}'></td>"
           "</tr>"
           "<tr>"
             "<td style='width:250px'><b>Hostname suffix</b></td>"
@@ -665,41 +665,49 @@ class devices_online
       var dvo_wifirssi = persist.find("dvo_wifirssi", 0)
       var dvo_wifichnl = persist.find("dvo_wifichnl", 0)
 
-      var msg = "</table><table style='width:100%;font-size:80%'>" # Terminate two column table and open new table
+      var msg = "</table>"                          # Terminate two column table and open new table
+      msg += "<style>"                              # Add style increasing space between columns
+      msg += ".dvo{width:100%;font-size:80%;border-spacing:0px;}"
+      msg += ".dvo td,.dvo th{padding:0px 3px;}"    # Column space
+      msg += ".dvo td:first-child,.dvo th:first-child{padding-left:2px;}"
+      msg += ".dvo td:last-child,.dvo th:last-child{padding-right:2px;}"
+      msg += "</style>"
+      msg += "<table class='dvo'>"                  # Open new condensed table
+
       msg += "<tr>"
 
       if dvo_lines > 0                              # Fixed number of last updated lines
         self.sort_col(self.list_devices, 6, 1)      # Sort list by last_seen and down
 
         if dvo_devicename
-          msg += "<th>Device Name&nbsp</th>"
+          msg += "<th>Device Name</th>"
         end
-        msg += "<th>Hostname&nbsp</th>"
+        msg += "<th>Hostname</th>"
         if dvo_ipaddress
-          msg += "<th>IP Address&nbsp</th>"
+          msg += "<th>IP Address</th>"
         end
         if dvo_power
-          msg += "<th>Power&nbsp</th>"
+          msg += "<th>Power</th>"
         end
         if dvo_version
-          msg += "<th>Version&nbsp</th>"
+          msg += "<th>Version</th>"
         end
         if dvo_heap
-          msg += "<th align='right'>Heap&nbsp</th>"
+          msg += "<th align='right'>Heap</th>"
         end
         if dvo_berryheap
-          msg += "<th align='right'>BHeap&nbsp</th>"
+          msg += "<th align='right'>BHeap</th>"
         end
         if dvo_berryobject
-          msg += "<th align='right'>BObject&nbsp</th>"
+          msg += "<th align='right'>BObject</th>"
         end
         if dvo_wifirssi
-          msg += "<th align='right'>RSSI&nbsp</th>"
+          msg += "<th align='right'>RSSI</th>"
         end
         if dvo_wifichnl
-          msg += "<th align='right'>Ch&nbsp</th>"
+          msg += "<th align='right'>Ch</th>"
         end
-        msg += "<th align='right'>Uptime&nbsp</th>"
+        msg += "<th align='right'>Uptime</th>"
       else                                          # All devices sorted by user selected column
         #               0  1  2              3               4  5            6  7  8  9              10            11        12              13  14
         var list_dvo = [0, 1, dvo_ipaddress, dvo_devicename, 0, dvo_version, 0, 0, 1, dvo_berryheap, dvo_wifirssi, dvo_heap, dvo_berryobject, 0, dvo_wifichnl]
@@ -717,34 +725,34 @@ class devices_online
 
         var icon_direction = persist.dvo_direction ? "&#x25BC" : "&#x25B2"
         if dvo_devicename
-          msg += format("<th><a href='#p' onclick='la(\"&sd_sort=3\");'>Device Name</a>%s&nbsp</th>", persist.dvo_column == 3 ? icon_direction : "")
+          msg += format("<th><a href='#p' onclick='la(\"&sd_sort=3\");'>Device Name</a>%s</th>", persist.dvo_column == 3 ? icon_direction : "")
         end
-        msg += format("<th><a href='#p' onclick='la(\"&sd_sort=1\");'>Hostname</a>%s&nbsp</th>", persist.dvo_column == 1 ? icon_direction : "")
+        msg += format("<th><a href='#p' onclick='la(\"&sd_sort=1\");'>Hostname</a>%s</th>", persist.dvo_column == 1 ? icon_direction : "")
         if dvo_ipaddress
-          msg += format("<th><a href='#p' onclick='la(\"&sd_sort=2\");'>IP Address</a>%s&nbsp</th>", persist.dvo_column == 2 ? icon_direction : "")
+          msg += format("<th><a href='#p' onclick='la(\"&sd_sort=2\");'>IP Address</a>%s</th>", persist.dvo_column == 2 ? icon_direction : "")
         end
         if dvo_power
-          msg += format("<th>Power&nbsp</th>")
+          msg += format("<th>Power</th>")
         end
         if dvo_version
-          msg += format("<th><a href='#p' onclick='la(\"&sd_sort=5\");'>Version</a>%s&nbsp</th>", persist.dvo_column == 5 ? icon_direction : "")
+          msg += format("<th><a href='#p' onclick='la(\"&sd_sort=5\");'>Version</a>%s</th>", persist.dvo_column == 5 ? icon_direction : "")
         end
         if dvo_heap
-          msg += format("<th align='right'><a href='#p' onclick='la(\"&sd_sort=11\");'>Heap</a>%s&nbsp</th>", persist.dvo_column == 11 ? icon_direction : "")
+          msg += format("<th align='right'><a href='#p' onclick='la(\"&sd_sort=11\");'>Heap</a>%s</th>", persist.dvo_column == 11 ? icon_direction : "")
         end
         if dvo_berryheap
-          msg += format("<th align='right'><a href='#p' onclick='la(\"&sd_sort=9\");'>BHeap</a>%s&nbsp</th>", persist.dvo_column == 9 ? icon_direction : "")
+          msg += format("<th align='right'><a href='#p' onclick='la(\"&sd_sort=9\");'>BHeap</a>%s</th>", persist.dvo_column == 9 ? icon_direction : "")
         end
         if dvo_berryobject
-          msg += format("<th align='right'><a href='#p' onclick='la(\"&sd_sort=12\");'>BObject</a>%s&nbsp</th>", persist.dvo_column == 12 ? icon_direction : "")
+          msg += format("<th align='right'><a href='#p' onclick='la(\"&sd_sort=12\");'>BObject</a>%s</th>", persist.dvo_column == 12 ? icon_direction : "")
         end
         if dvo_wifirssi
-          msg += format("<th align='right'><a href='#p' onclick='la(\"&sd_sort=10\");'>RSSI</a>%s&nbsp</th>", persist.dvo_column == 10 ? icon_direction : "")
+          msg += format("<th align='right'><a href='#p' onclick='la(\"&sd_sort=10\");'>RSSI</a>%s</th>", persist.dvo_column == 10 ? icon_direction : "")
         end
         if dvo_wifichnl
-          msg += format("<th align='right'><a href='#p' onclick='la(\"&sd_sort=14\");'>Ch</a>%s&nbsp</th>", persist.dvo_column == 14 ? icon_direction : "")
+          msg += format("<th align='right'><a href='#p' onclick='la(\"&sd_sort=14\");'>Ch</a>%s</th>", persist.dvo_column == 14 ? icon_direction : "")
         end
-        msg += format("<th align='right'><a href='#p' onclick='la(\"&sd_sort=8\");'>Uptime</a>%s&nbsp</th>", persist.dvo_column == 8 ? icon_direction : "")
+        msg += format("<th align='right'><a href='#p' onclick='la(\"&sd_sort=8\");'>Uptime</a>%s</th>", persist.dvo_column == 8 ? icon_direction : "")
       end
 
       msg += "</tr>"
@@ -793,61 +801,59 @@ class devices_online
 
         msg = "<tr>"
         if dvo_devicename
-          msg += f"<td{color}>{devicename}&nbsp</td>"
+          msg += f"<td{color}>{devicename}</td>"
         end
         if offline
-          msg += f"<td{color}>{hostname}&nbsp</td>"
+          msg += f"<td{color}>{hostname}</td>"
         else
-          msg += f"<td><a target=_blank href='http://{hostname}{dvo_hostname_suffix}'>{hostname}&nbsp</a></td>"
+          msg += f"<td><a target=_blank href='http://{hostname}{dvo_hostname_suffix}'>{hostname}</a></td>"
         end
         if dvo_ipaddress
           if offline
-            msg += f"<td{color}>{ipaddress}&nbsp</td>"
+            msg += f"<td{color}>{ipaddress}</td>"
           else
-            msg += f"<td><a target=_blank href='http://{ipaddress}'>{ipaddress}&nbsp</a></td>"
+            msg += f"<td><a target=_blank href='http://{ipaddress}'>{ipaddress}</a></td>"
           end
         end
         if dvo_power
+          msg += "<td>"
           if !offline && power.size()
-            msg += "<td>"
             for p: power.keys()
               var hcolor = (power[p]) ? "txtscc" : "btn"
               var picon = (power[p]) ? "&#x2612" : "&#x2610"
-              msg += f"<a href='#p' style='color:var(--c_{hcolor});' title='Toggle POWER{p +1}' onclick='la(\"&sd_pow={topic}_{p +1}\");'>{picon}&nbsp</a>"
+              msg += f"<a href='#p' style='color:var(--c_{hcolor});' title='Toggle POWER{p +1}' onclick='la(\"&sd_pow={topic}_{p +1}\");'>{picon}&nbsp;</a>"
             end
-            msg += "</td>"
-          else
-            msg += "<td>&nbsp</td>"
           end
+          msg += "</td>"
         end
         if dvo_version
-          msg += f"<td{color}>{version}&nbsp</td>"
+          msg += f"<td{color}>{version}</td>"
         end
         var svar
         if dvo_heap
           var iheap = int(heap)                     # Workaround to remove leading zeros
           svar = (iheap > 0) ? str(iheap) : ""
-          msg += f"<td align='right'{color}>{svar}&nbsp</td>"
+          msg += f"<td align='right'{color}>{svar}</td>"
         end
         if dvo_berryheap
           var bheap = int(berryheap)                # Workaround to remove leading zeros
           svar = (bheap > 0) ? str(bheap) : ""
-          msg += f"<td align='right'{color}>{svar}&nbsp</td>"
+          msg += f"<td align='right'{color}>{svar}</td>"
         end
         if dvo_berryobject
           var bobject = int(berryobject)            # Workaround to remove leading zeros
           svar = (bobject > 0) ? str(bobject) : ""
-          msg += f"<td align='right'{color}>{svar}&nbsp</td>"
+          msg += f"<td align='right'{color}>{svar}</td>"
         end
         if dvo_wifirssi
           var wrssi = int(wifirssi)                 # Workaround to remove leading zeros
           svar = str(wrssi)
-          msg += f"<td align='right'{color}>{svar}%&nbsp</td>"
+          msg += f"<td align='right'{color}>{svar}%</td>"
         end
         if dvo_wifichnl
           var wchnl = int(wifichnl)                 # Workaround to remove leading zeros
           svar = str(wchnl)
-          msg += f"<td align='right'{color}>{svar}&nbsp</td>"
+          msg += f"<td align='right'{color}>{svar}</td>"
         end
         if int(last_seen) >= (now - dvo_time_highlight) # Highlight changes within latest seconds
           color = " style='color:var(--c_btnsv);'"
