@@ -38,7 +38,7 @@ class Wifi_Heap_Sticker
       var rssi = tasmota.wifi('rssi')
       webserver.content_send(format("<div class='wifi' title='%s: RSSI %d%% (%d dBm)'><div class='arc a3%s'></div><div class='arc a2%s'></div><div class='arc a1%s'></div><div class='arc a0'></div></div>",
                                     tasmota.wifi('ssid'),
-									tasmota.wifi('quality'), rssi,
+                                    tasmota.wifi('quality'), rssi,
                                     rssi < -55 ? " o30" : "",
                                     rssi < -70 ? " o30" : "",
                                     rssi < -85 ? " o30" : ""))
