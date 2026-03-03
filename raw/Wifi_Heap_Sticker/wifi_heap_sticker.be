@@ -10,13 +10,13 @@ class Wifi_Heap_Sticker
 
   static var HTTP_HEAD_STYLE_WIFI =
     "<style>"
-    ".wifi{width:18px;height:18px;position:relative}"
-    ".arc{padding:0;position:absolute;border:2px solid transparent;border-radius:50%;border-top-color:var(--c_frm)}"
-    ".a0{width:2px;height:3px;top:10px;left:11px}"
-    ".a1{width:6px;height:6px;top:7px;left:9px}"
-    ".a2{width:12px;height:12px;top:4px;left:6px}"
-    ".a3{width:18px;height:18px;top:1px;left:3px}"
-    ".arc.active{border-top-color:var(--c_ttl)}"
+    ".wifi{width:18px;height:12px;position:relative}"
+    ".arc{padding:0;position:absolute;border:2px solid transparent;border-radius:50%;border-top-color:var(--c_txt)}"
+    ".a0{width:2px;height:3px;top:9px;left:8px}"
+    ".a1{width:6px;height:6px;top:6px;left:6px}"
+    ".a2{width:12px;height:12px;top:3px;left:3px}"
+    ".a3{width:18px;height:18px;top:0px;left:0px}"
+    ".o30{opacity:.3}"
     "</style>"
 
   def init()
@@ -36,11 +36,12 @@ class Wifi_Heap_Sticker
     if tasmota.wifi('up')
       webserver.content_send(self.HTTP_HEAD_STYLE_WIFI)
       var rssi = tasmota.wifi('rssi')
-      webserver.content_send(format("<div class='wifi' title='RSSI %d%%, %d dBm' style='padding:0 2px 0 2px;'><div class='arc a3 %s'></div><div class='arc a2 %s'></div><div class='arc a1 %s'></div><div class='arc a0 active'></div></div>",
+      webserver.content_send(format("<div class='wifi' title='%s: RSSI %d%% (%d dBm)'><div class='arc a3%s'></div><div class='arc a2%s'></div><div class='arc a1%s'></div><div class='arc a0'></div></div>",
+                                    tasmota.wifi('ssid'),
                                     tasmota.wifi('quality'), rssi,
-                                    rssi >= -55 ? "active" : "",
-                                    rssi >= -70 ? "active" : "",
-                                    rssi >= -85 ? "active" : ""))
+                                    rssi < -55 ? " o30" : "",
+                                    rssi < -70 ? " o30" : "",
+                                    rssi < -85 ? " o30" : ""))
     end
     # display free heap
     var gc_time = tasmota.memory('gc_time')
