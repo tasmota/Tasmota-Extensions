@@ -463,13 +463,14 @@ class devices_online
         var dvo_online_window = int(persist.find("dvo_online_window", 600))
         var dvo_offline = int(persist.find("dvo_offline", 600))
         var time_window = int(last_seen) - dvo_online_window
-        var time_window_offline = time_window - dvo_offline
         var update = 0;
         var list_size = size(self.list_devices)
         if list_size > 0
           var list_index = 0
           while list_index < list_size              # Use while loop as counter is decremented
             var list_last_seen = int(self.list_devices[list_index][6])
+            var list_uptime_sec = int(self.list_devices[list_index][8]) # Is incremental negative if offline
+            var time_window_offline = dvo_offline + list_uptime_sec     # Is negative if offline for over dvo_offline seconds
             var list_heap = int(self.list_devices[list_index][11])
             if update == 0 && 
                self.list_devices[list_index][0] == topic
@@ -480,7 +481,7 @@ class devices_online
             elif self.list_devices[list_index][1] == hostname ||      # Remove duplicate hostname
                  self.list_devices[list_index][2] == ipaddress ||     # Remove duplicate IP address
                  (list_heap == 0 && time_window > list_last_seen) ||  # Remove offlines never seen
-                 time_window_offline > list_last_seen                 # Remove offlines after user visibility
+                 time_window_offline < 0                              # Remove offlines after user visibility
 #              log(f"DVO:     State --- delete {self.list_devices[list_index]}", 3)
               self.list_devices.remove(list_index)  # Remove duplicates or offline device
               list_size -= 1
