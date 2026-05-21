@@ -3,4 +3,6 @@
 {"name":"Leds Panel","file":"Leds_Panel.tapp","version":"0x19090100","description":"Realtime display of the WS2812 leds in browser","author":"Stephan Hadinger"}
 {"name":"LoRaWan Decoders","file":"LoRaWan_Decoders.tapp","version":"0x1A040B00","description":"Decode LoRaWan devices","author":"Theo Arends"}
 {"name":"Partition Wizard","file":"Partition_Wizard.tapp","version":"0x19090100","description":"Wizard for resizing partitions and converting to safeboot layout","author":"Stephan Hadinger"}
+{"name":"TasmoClaw Full","file":"TasmoClaw_Full.tapp","version":"0x1A051500","description":"Full TasmoClaw AI chat for PSRAM devices with broad Tasmota tools, Berry programming, filesystem, and advanced workflows","author":"Frederick Blais"}
+{"name":"TasmoClaw Lite","file":"TasmoClaw_Lite.tapp","version":"0x1A051500","description":"Stock ESP32-friendly TasmoClaw AI chat with nice UI, read tools, and approval-gated safe Tasmota actions","author":"Frederick Blais"}
 {"name":"Wifi Heap Sticker","file":"Wifi_Heap_Sticker.tapp","version":"0x1A020700","description":"Display top left sticker with Wifi strength and memory heap","author":"Stephan Hadinger"}
