@@ -77,4 +77,5 @@ tasmoclaw_util.json_encode = def(v) return _util.json_encode(v) end
 tasmoclaw_util.preview = def(s, limit) return _util.preview(s, limit) end
 tasmoclaw_util.safe_url = def(url) return _util.safe_url(url) end
 tasmoclaw_util.debug = def(msg) return _util.debug(msg) end
+global.tasmoclaw_util_mod = tasmoclaw_util
 return tasmoclaw_util

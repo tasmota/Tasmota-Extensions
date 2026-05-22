@@ -21,42 +21,45 @@ end
 end
 return fallback
 end
-tasmoclaw_commands.rtttl_presets = def()
-return {
-'happy_birthday':'Happy:d=4,o=5,b=120:8g,8g,a,g,c6,b,2g,8g,8g,a,g,d6,c6,2g,8g,8g,g6,e6,c6,b,a,2f6,8f6,e6,c6,d6,c6',
-'happy':'Happy:d=4,o=5,b=120:8g,8g,a,g,c6,b,2g,8g,8g,a,g,d6,c6,2g,8g,8g,g6,e6,c6,b,a,2f6,8f6,e6,c6,d6,c6',
-'success':'Success:d=16,o=5,b=180:c,e,g,c6',
-'ok':'Success:d=16,o=5,b=180:c,e,g,c6',
-'error':'Error:d=8,o=5,b=120:c,16p,c,16p,c',
-'startup':'Startup:d=16,o=5,b=160:c,e,g,8c6,8p,g,c6',
-'mario':'Mario:d=16,o=5,b=100:e6,e6,32p,e6,32p,c6,e6,32p,g6,8p,g',
-'scale':'Scale:d=8,o=5,b=140:c,d,e,f,g,a,b,c6',
-'twinkle':'Twinkle:d=4,o=5,b=100:c,c,g,g,a,a,2g,f,f,e,e,d,d,2c',
-'ode':'Ode:d=4,o=5,b=120:e,e,f,g,g,f,e,d,c,c,d,e,e,d,2d'
-}
-end
-tasmoclaw_commands.rtttl_key = def(name)
-if name == nil
+tasmoclaw_commands.fs_prefix_kind = def(p)
+if p == nil
 return ''
 end
-var key = string.tolower(str(name))
-key = string.replace(key, ' ', '_')
-key = string.replace(key, '-', '_')
-return key
+var l = string.tolower(str(p))
+var sd = string.find(l, 'sd:')
+if sd != nil && sd == 0
+return 'sd'
 end
-tasmoclaw_commands.is_rtttl = def(tune)
-if tune == nil
-return false
+var flash = string.find(l, 'flash:')
+if flash != nil && flash == 0
+return 'flash'
 end
-var s = str(tune)
-var colon = string.find(s, ':')
-var comma = string.find(s, ',')
-var defaults = string.find(s, 'd=')
-return colon != nil && colon >= 0 && comma != nil && comma >= 0 && defaults != nil && defaults >= 0
+return ''
 end
-tasmoclaw_commands.rtttl_from_name = def(name)
-var presets = tasmoclaw_commands.rtttl_presets()
-return presets.find(tasmoclaw_commands.rtttl_key(name))
+tasmoclaw_commands.strip_fs_prefix = def(p)
+if p == nil || p == ''
+return ''
+end
+var kind = tasmoclaw_commands.fs_prefix_kind(p)
+var out = str(p)
+if kind == 'sd'
+if size(out) <= 3
+return ''
+end
+out = out[3..size(out)-1]
+elif kind == 'flash'
+if size(out) <= 6
+return ''
+end
+out = out[6..size(out)-1]
+end
+if out == ''
+return ''
+end
+if out[0..0] != '/'
+out = '/' + out
+end
+return out
 end
 tasmoclaw_commands.families = def()
 return [
@@ -77,12 +80,6 @@ return [
 'title':'Power relays',
 'keywords':['power','relay','toggle','switch','on','off'],
 'examples':['Power','Power1','Power2','Power2 2','Power1 1','Power1 0']
-},
-{
-'id':'audio',
-'title':'I2S audio and RTTTL',
-'keywords':['audio','i2s','play','song','rtttl','music','say','speak','volume','gain','beep','record'],
-'examples':['I2SRtttl <tune>','I2SPlay sd:/music/file.mp3','I2SGain 20','I2SSay hello','I2SStop']
 },
 {
 'id':'display',
@@ -142,7 +139,7 @@ return [
 'id':'filesystem',
 'title':'FlashFS, SD card, and UFS',
 'keywords':['file','filesystem','ufs','sd','card','flash','delete','list','copy','move'],
-'examples':['Ufs','UfsType','UfsSize','UfsFree','UfsList sd:/','UfsList flash:/']
+'examples':['Ufs','UfsType','UfsSize','UfsFree','UfsList','UfsList /','UfsDelete /old.txt','UfsRename /old.txt,/new.txt']
 },
 {
 'id':'timers',
@@ -247,9 +244,6 @@ reason = 'Rules read is read-only.'
 elif (first == 'rule1' || first == 'rule2' || first == 'rule3') && rest == ''
 safety = 'read'
 reason = 'Rule slot read is read-only.'
-elif first == 'i2sconfig' && rest == ''
-safety = 'read'
-reason = 'I2SConfig without payload is read-only.'
 elif (first == 'display' || first == 'displaymodel' || first == 'displaytype' || first == 'displaywidth' || first == 'displayheight' || first == 'displaymode' || first == 'displaydimmer' || first == 'displaysize' || first == 'displayfont' || first == 'displayrotate' || first == 'displayinvert' || first == 'displaycolumns' || first == 'displayrows') && rest == ''
 safety = 'read'
 reason = 'Display command without payload is read-only.'
@@ -303,7 +297,7 @@ reason = 'Command writes device configuration.'
 elif first == 'dimmer' || first == 'color' || first == 'colour' || first == 'ct' || first == 'white' || first == 'scheme' || first == 'fade' || first == 'speed' || first == 'ledstate' || string.find(first, 'pulsetime') == 0 || string.find(first, 'ruletimer') == 0 || first == 'timers' || string.find(first, 'timer') == 0
 safety = 'action'
 reason = 'Command changes light, timer, or runtime behavior.'
-elif first == 'ufsdelete' || first == 'ufsrename' || first == 'ufsmkdir' || first == 'ufsrmdir' || first == 'ufsrun'
+elif first == 'ufsdelete' || first == 'ufsrename' || first == 'ufsrun'
 safety = 'write'
 reason = 'Command modifies or runs files.'
 elif first == 'publish' || first == 'publish2' || first == 'event' || first == 'displaytext' || first == 'displaytextnc' || first == 'displayclear' || first == 'displayrefresh' || first == 'displayreinit' || first == 'displaybatch'
@@ -312,9 +306,6 @@ reason = 'Command sends output or triggers device behavior.'
 elif first == 'webcolor' || string.find(first, 'webcolor') == 0
 safety = 'write'
 reason = 'WebColor command writes UI palette settings.'
-elif first == 'i2srtttl' || first == 'i2splay' || first == 'i2sloop' || first == 'i2spause' || first == 'i2sstop' || first == 'i2sgain' || first == 'i2ssay' || first == 'i2sbeep' || first == 'i2srec' || first == 'i2stime'
-safety = 'action'
-reason = 'I2S audio command changes audio state.'
 end
 return {
 'ok':true,
@@ -370,6 +361,8 @@ end
 tasmoclaw_commands.filesystem_command = def(args)
 var action = string.tolower(str(tasmoclaw_commands.first(args, ['action','mode'], 'list')))
 var p = tasmoclaw_commands.first(args, ['path','file','filename'], '')
+var p_kind = tasmoclaw_commands.fs_prefix_kind(p)
+var p_clean = tasmoclaw_commands.strip_fs_prefix(p)
 if action == 'status' || action == 'info'
 return 'Ufs'
 elif action == 'type'
@@ -379,33 +372,35 @@ return 'UfsSize'
 elif action == 'free'
 return 'UfsFree'
 elif action == 'list' || action == 'ls' || action == 'read'
-return p == '' ? 'UfsList' : 'UfsList ' + str(p)
+if p_kind == 'flash'
+return nil
+end
+return p_clean == '' || p_clean == '/' ? 'UfsList' : 'UfsList ' + str(p_clean)
 elif action == 'delete' || action == 'remove'
-if p == ''
+if p_clean == ''
 return nil
 end
-return 'UfsDelete ' + str(p)
-elif action == 'mkdir' || action == 'createdir'
-if p == ''
-return nil
+if p_kind == 'flash'
+return 'UfsDelete2 ' + str(p_clean)
 end
-return 'UfsMkDir ' + str(p)
-elif action == 'rmdir' || action == 'removedir'
-if p == ''
+return 'UfsDelete ' + str(p_clean)
+elif action == 'mkdir' || action == 'createdir' || action == 'rmdir' || action == 'removedir'
 return nil
-end
-return 'UfsRmDir ' + str(p)
 elif action == 'rename' || action == 'move'
 var dest = tasmoclaw_commands.first(args, ['dest','destination','to'], '')
-if p == '' || dest == ''
+var dest_clean = tasmoclaw_commands.strip_fs_prefix(dest)
+if p_clean == '' || dest_clean == ''
 return nil
 end
-return 'UfsRename ' + str(p) + ',' + str(dest)
+if p_kind == 'flash'
+return 'UfsRename2 ' + str(p_clean) + ',' + str(dest_clean)
+end
+return 'UfsRename ' + str(p_clean) + ',' + str(dest_clean)
 elif action == 'run'
-if p == ''
+if p_clean == '' || p_kind == 'sd'
 return nil
 end
-return 'UfsRun ' + str(p)
+return 'UfsRun ' + str(p_clean)
 end
 return nil
 end
@@ -427,103 +422,117 @@ return prefix + ' 2'
 end
 return nil
 end
-tasmoclaw_commands.audio_command = def(args)
-var action = string.tolower(str(tasmoclaw_commands.first(args, ['action','mode'], 'rtttl')))
-if action == 'rtttl' || action == 'song' || action == 'tune'
-var tune = tasmoclaw_commands.first(args, ['rtttl','tune','body'], nil)
-if tune != nil && !tasmoclaw_commands.is_rtttl(tune)
-var named_tune = tasmoclaw_commands.rtttl_from_name(tune)
-if named_tune == nil
-return nil
-end
-tune = named_tune
-end
-if tune == nil
-var preset = tasmoclaw_commands.first(args, ['preset','name','song'], nil)
-if preset != nil
-tune = tasmoclaw_commands.rtttl_from_name(preset)
-end
-end
-if tune == nil || !tasmoclaw_commands.is_rtttl(tune)
-return nil
-end
-return 'I2SRtttl ' + str(tune)
-elif action == 'play'
-var p = tasmoclaw_commands.first(args, ['path','file','filename','url'], '')
-return p == '' ? 'I2SPlay' : 'I2SPlay ' + str(p)
-elif action == 'loop'
-var lp = tasmoclaw_commands.first(args, ['path','file','filename','url'], '')
-return 'I2SLoop ' + str(lp)
-elif action == 'pause'
-return 'I2SPause'
-elif action == 'resume'
-return 'I2SPlay'
-elif action == 'stop'
-return 'I2SStop'
-elif action == 'say' || action == 'speak'
-var text = tasmoclaw_commands.first(args, ['text','message','content'], '')
-return 'I2SSay ' + str(text)
-elif action == 'gain' || action == 'volume'
-var value = tasmoclaw_commands.first(args, ['value','level','gain','volume'], '25')
-return 'I2SGain ' + str(value)
-elif action == 'beep'
-var duration = tasmoclaw_commands.first(args, ['duration','duration_ms','ms'], '')
-return duration == '' ? 'I2SBeep' : 'I2SBeep ' + str(duration)
-elif action == 'codec'
-return 'I2SCodec'
-elif action == 'time'
-return 'I2STime'
-elif action == 'record' || action == 'rec'
-var seconds = tasmoclaw_commands.first(args, ['seconds','duration'], '')
-var dest = tasmoclaw_commands.first(args, ['path','file','filename'], '')
-if seconds == ''
-return 'I2SRec'
-end
-return dest == '' ? 'I2SRec ' + str(seconds) : 'I2SRec ' + str(seconds) + ',' + str(dest)
-end
-return nil
-end
 tasmoclaw_commands.display_command = def(args)
 var action = string.tolower(str(tasmoclaw_commands.first(args, ['action','mode'], 'text')))
-if action == 'read' || action == 'status' || action == 'info'
-return 'Display'
-elif action == 'model'
-return 'DisplayModel'
-elif action == 'type'
-return 'DisplayType'
-elif action == 'width'
-return 'DisplayWidth'
-elif action == 'height'
-return 'DisplayHeight'
-elif action == 'mode'
-var mode = tasmoclaw_commands.first(args, ['value','mode_value'], nil)
-return mode == nil ? 'DisplayMode' : 'DisplayMode ' + str(mode)
-elif action == 'dimmer' || action == 'brightness'
-var dimmer = tasmoclaw_commands.first(args, ['value','level','dimmer','brightness'], nil)
-return dimmer == nil ? 'DisplayDimmer' : 'DisplayDimmer ' + str(dimmer)
-elif action == 'size'
-var display_size = tasmoclaw_commands.first(args, ['value','size'], nil)
-return display_size == nil ? 'DisplaySize' : 'DisplaySize ' + str(display_size)
-elif action == 'font'
-var font = tasmoclaw_commands.first(args, ['value','font'], nil)
-return font == nil ? 'DisplayFont' : 'DisplayFont ' + str(font)
-elif action == 'rotate' || action == 'rotation'
-var rot = tasmoclaw_commands.first(args, ['value','rotation','rotate'], nil)
-return rot == nil ? 'DisplayRotate' : 'DisplayRotate ' + str(rot)
-elif action == 'invert'
-var inv = tasmoclaw_commands.first(args, ['value','enabled','invert'], nil)
-return inv == nil ? 'DisplayInvert' : 'DisplayInvert ' + str(inv)
-elif action == 'clear'
-return 'DisplayClear'
-elif action == 'refresh'
-return 'DisplayRefresh'
-elif action == 'reinit' || action == 'restart'
-return 'DisplayReInit'
-elif action == 'batch'
-var path = tasmoclaw_commands.first(args, ['path','file','filename'], '')
-return path == '' ? nil : 'DisplayBatch ' + str(path)
+var mode = nil
+var dimmer = nil
+var display_size = nil
+var font = nil
+var rot = nil
+var invert_value = nil
+var batch_path = ''
+var msg = ''
+var wants_status = false
+if action == 'read'
+wants_status = true
 end
-var msg = tasmoclaw_commands.first(args, ['message','text','content'], '')
+if action == 'status'
+wants_status = true
+end
+if action == 'info'
+wants_status = true
+end
+if wants_status
+return 'Display'
+end
+if action == 'model'
+return 'DisplayModel'
+end
+if action == 'type'
+return 'DisplayType'
+end
+if action == 'width'
+return 'DisplayWidth'
+end
+if action == 'height'
+return 'DisplayHeight'
+end
+if action == 'mode'
+mode = tasmoclaw_commands.first(args, ['value','mode_value'], nil)
+if mode == nil
+return 'DisplayMode'
+end
+return 'DisplayMode ' + str(mode)
+end
+var wants_dimmer = false
+if action == 'dimmer'
+wants_dimmer = true
+end
+if action == 'brightness'
+wants_dimmer = true
+end
+if wants_dimmer
+dimmer = tasmoclaw_commands.first(args, ['value','level','dimmer','brightness'], nil)
+if dimmer == nil
+return 'DisplayDimmer'
+end
+return 'DisplayDimmer ' + str(dimmer)
+end
+if action == 'size'
+display_size = tasmoclaw_commands.first(args, ['value','size'], nil)
+if display_size == nil
+return 'DisplaySize'
+end
+return 'DisplaySize ' + str(display_size)
+end
+if action == 'font'
+font = tasmoclaw_commands.first(args, ['value','font'], nil)
+if font == nil
+return 'DisplayFont'
+end
+return 'DisplayFont ' + str(font)
+end
+var wants_rotate = false
+if action == 'rotate'
+wants_rotate = true
+end
+if action == 'rotation'
+wants_rotate = true
+end
+if wants_rotate
+rot = tasmoclaw_commands.first(args, ['value','rotation','rotate'], nil)
+if rot == nil
+return 'DisplayRotate'
+end
+return 'DisplayRotate ' + str(rot)
+end
+if action == 'invert'
+invert_value = tasmoclaw_commands.first(args, ['value','enabled','invert'], nil)
+if invert_value == nil
+return 'DisplayInvert'
+end
+return 'DisplayInvert ' + str(invert_value)
+end
+if action == 'clear'
+return 'DisplayClear'
+end
+if action == 'refresh'
+return 'DisplayRefresh'
+end
+if action == 'reinit'
+return 'DisplayReInit'
+end
+if action == 'restart'
+return 'DisplayReInit'
+end
+if action == 'batch'
+batch_path = tasmoclaw_commands.first(args, ['path','file','filename'], '')
+if batch_path == ''
+return nil
+end
+return 'DisplayBatch ' + str(batch_path)
+end
+msg = tasmoclaw_commands.first(args, ['message','text','content'], '')
 return 'DisplayText ' + str(msg)
 end
 tasmoclaw_commands.light_command = def(args)
@@ -711,9 +720,7 @@ return cls
 end
 var family = string.tolower(str(tasmoclaw_commands.first(args, ['family','domain','tool'], '')))
 var command = nil
-if family == 'audio' || family == 'i2s' || family == 'sound'
-command = tasmoclaw_commands.audio_command(args)
-elif family == 'display' || family == 'screen'
+if family == 'display' || family == 'screen'
 command = tasmoclaw_commands.display_command(args)
 elif family == 'light' || family == 'led'
 command = tasmoclaw_commands.light_command(args)
@@ -743,4 +750,5 @@ var out = tasmoclaw_commands.classify_command(command)
 out['description'] = family + ' command'
 return out
 end
+global.tasmoclaw_commands_mod = tasmoclaw_commands
 return tasmoclaw_commands

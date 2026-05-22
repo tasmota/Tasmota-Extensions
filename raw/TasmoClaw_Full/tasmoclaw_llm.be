@@ -1,6 +1,7 @@
 import json
 import string
-import tasmoclaw_util
+import introspect
+var tasmoclaw_util = introspect.module('tasmoclaw_util')
 class TasmoClawLLM
 def call_chat(cfg, messages)
 var provider = self.provider(cfg)
@@ -56,31 +57,8 @@ if !local_provider && cfg.find('api_key') != nil && cfg['api_key'] != ''
 headers['Authorization'] = 'Bearer '+cfg['api_key']
 end
 var headers_s = tasmoclaw_util.json_encode(headers)
-var transport = cfg.find('https_transport')
-if transport == nil || transport == ''
-transport = 'webclient'
-end
-if transport != 'webclient' && transport != 'native' && transport != 'auto'
-transport = 'webclient'
-end
-tasmoclaw_util.debug('llm call start provider=' + provider + ' transport=' + transport + ' model=' + str(cfg['model']) + ' messages=' + str(size(messages)) + ' payload_bytes=' + str(size(payload_s)) + ' max_tokens=' + str(max_tokens) + ' thinking=' + thinking)
-if transport == 'native'
-return self.call_chat_native(cfg, payload_s, headers_s, nil)
-elif transport == 'auto'
-var wr = self.call_chat_webclient(cfg, payload_s, nil)
-if wr.find('ok') == true || !self.should_native_fallback(wr)
-tasmoclaw_util.debug('llm auto webclient result ok=' + str(wr.find('ok')) + ' status=' + str(wr.find('status')) + ' error=' + str(wr.find('error')))
-return wr
-end
-tasmoclaw_util.debug('llm auto falling back to native after webclient error=' + str(wr.find('error')) + ' status=' + str(wr.find('status')))
-var nr = self.call_chat_native(cfg, payload_s, headers_s, wr.find('error'))
-if nr.find('ok') == true
-nr['webclient_error'] = wr.find('error')
-end
-tasmoclaw_util.debug('llm auto native result ok=' + str(nr.find('ok')) + ' status=' + str(nr.find('status')) + ' error=' + str(nr.find('error')))
-return nr
-end
-return self.call_chat_webclient(cfg, payload_s, nil)
+tasmoclaw_util.debug('llm call start provider=' + provider + ' transport=stock model=' + str(cfg['model']) + ' messages=' + str(size(messages)) + ' payload_bytes=' + str(size(payload_s)) + ' max_tokens=' + str(max_tokens) + ' thinking=' + thinking)
+return self.call_chat_webclient(cfg, payload_s)
 end
 def provider(cfg)
 var p = cfg.find('provider')
@@ -91,16 +69,6 @@ return str(p)
 end
 def is_local_provider(provider)
 return provider == 'local_openai' || provider == 'local' || provider == 'openai_compatible'
-end
-def should_native_fallback(r)
-if r == nil
-return true
-end
-var status = r.find('status')
-if status == nil
-return true
-end
-return status < 0
 end
 def extract_error_message(body)
 if body == nil || size(body) == 0
@@ -145,7 +113,7 @@ except .. as e_json,m_json
 end
 return tasmoclaw_util.preview(body, 220)
 end
-def http_error(transport, status, body, extra_error)
+def http_error(transport, status, body)
 var msg = self.extract_error_message(body)
 var error = 'HTTP '+str(status)
 if msg != nil && msg != ''
@@ -167,22 +135,16 @@ var r = {
 if status == 401 || status == 403
 r['hint'] = 'Check the API key or local server auth settings in /tasmoclaw/config.'
 end
-if extra_error != nil
-r['webclient_error'] = extra_error
-end
 tasmoclaw_util.debug('llm http error transport=' + transport + ' status=' + str(status) + ' error=' + error + ' body=' + tasmoclaw_util.preview(body, 160))
 return r
 end
-def empty_response_error(transport, status, extra_error)
+def empty_response_error(transport, status)
 var r = {
 'ok':false,
 'transport':transport,
 'status':status,
 'error':'HTTP '+str(status)+' returned an empty response body'
 }
-if extra_error != nil
-r['webclient_error'] = extra_error
-end
 tasmoclaw_util.debug('llm empty response transport=' + transport + ' status=' + str(status))
 return r
 end
@@ -204,68 +166,7 @@ end
 def retryable_webclient_error(code)
 return code < 0 && code != -8 && code > -1000
 end
-def call_chat_native(cfg, payload_s, headers_s, webclient_error)
-if !global.contains('idf_https_post')
-var msg = 'ESP-IDF HTTPS bridge idf_https_post is not available. Rebuild firmware with USE_TASMOCLAW_HTTPS to use native transport.'
-tasmoclaw_util.debug('native https unavailable')
-var r_missing = {'ok':false,'transport':'esp_http_client','error':msg}
-if webclient_error != nil
-r_missing['webclient_error'] = webclient_error
-end
-return r_missing
-end
-try
-tasmoclaw_util.debug('native https POST start url=' + tasmoclaw_util.safe_url(cfg['api_url']) + ' payload_bytes=' + str(size(payload_s)))
-var raw = global.idf_https_post(cfg['api_url'], headers_s, payload_s)
-tasmoclaw_util.debug('native https raw response bytes=' + str(raw == nil ? 0 : size(raw)))
-var nr = json.load(raw)
-if !nr['ok']
-tasmoclaw_util.debug('native https transport failure status=' + str(nr.find('status')) + ' stage=' + str(nr.find('stage')) + ' esp_err=' + str(nr.find('esp_err')) + ' error=' + str(nr.find('error')))
-var er = {
-'ok':false,
-'transport':'esp_http_client',
-'status':nr.find('status'),
-'stage':nr.find('stage'),
-'esp_err':nr.find('esp_err'),
-'error':nr.find('error') == nil ? 'ESP-IDF HTTPS request failed' : nr['error'],
-'body':tasmoclaw_util.preview(nr.find('body'), 500)
-}
-if webclient_error != nil
-er['webclient_error'] = webclient_error
-end
-return er
-end
-var status = nr.find('status')
-var body = nr.find('body')
-if status == nil
-status = 0
-end
-tasmoclaw_util.debug('native https POST done status=' + str(status) + ' body_bytes=' + str(body == nil ? 0 : size(body)) + ' truncated=' + str(nr.find('truncated')))
-if status < 200 || status >= 300
-return self.http_error('esp_http_client', status, body, webclient_error)
-end
-if body == nil || size(body) == 0
-return self.empty_response_error('esp_http_client', status, webclient_error)
-end
-if nr.find('truncated') == true
-tasmoclaw_util.debug('native https oversized/truncated response bytes=' + str(nr.find('bytes')))
-return {'ok':false,'transport':'esp_http_client','status':status,'error':'oversized response','bytes':nr.find('bytes'),'webclient_error':webclient_error}
-end
-var pr = self.parse_response(body)
-pr['transport'] = 'esp_http_client'
-pr['status'] = status
-return pr
-except .. as e_native,m_native
-var msg = 'ESP-IDF HTTPS bridge idf_https_post failed: '+str(m_native)
-tasmoclaw_util.debug('native https exception: ' + str(e_native) + ' ' + str(m_native))
-var r = {'ok':false,'transport':'esp_http_client','error':msg}
-if webclient_error != nil
-r['webclient_error'] = webclient_error
-end
-return r
-end
-end
-def call_chat_webclient(cfg, payload_s, native_missing)
+def call_chat_webclient(cfg, payload_s)
 var attempts = cfg.find('webclient_retries')
 if attempts == nil
 attempts = 2
@@ -283,7 +184,7 @@ var attempt = 0
 while attempt < attempts
 attempt += 1
 tasmoclaw_util.debug('webclient attempt ' + str(attempt) + '/' + str(attempts))
-var r = self.call_chat_webclient_once(cfg, payload_s, native_missing, attempt, attempts)
+var r = self.call_chat_webclient_once(cfg, payload_s, attempt, attempts)
 if r.find('ok') == true
 tasmoclaw_util.debug('webclient attempt ok status=' + str(r.find('status')))
 return r
@@ -298,7 +199,14 @@ last = r
 end
 return last
 end
-def call_chat_webclient_once(cfg, payload_s, native_missing, attempt, attempts)
+def call_chat_webclient_once(cfg, payload_s, attempt, attempts)
+if self.is_local_provider(self.provider(cfg)) && string.find(str(cfg['api_url']), 'http://') == 0
+var tcp_r = self.call_chat_tcp_http(cfg, payload_s)
+if tcp_r.find('ok') == true
+return tcp_r
+end
+tasmoclaw_util.debug('tcpclient local chat failed status=' + str(tcp_r.find('status')) + ' error=' + str(tcp_r.find('error')))
+end
 var cl = nil
 try
 cl = webclient()
@@ -307,8 +215,7 @@ tasmoclaw_util.debug('webclient unavailable: ' + str(e) + ' ' + str(m))
 return {
 'ok':false,
 'transport':'webclient',
-'error':'Tasmota Berry webclient is unavailable: '+str(m),
-'native_error':native_missing
+'error':'Tasmota Berry webclient is unavailable: '+str(m)
 }
 end
 try
@@ -346,23 +253,22 @@ return {
 'status':code,
 'error': 'HTTP '+str(code)+' from Tasmota webclient before receiving a server response ('+self.webclient_error_name(code)+')',
 'hint': 'The TCP/TLS connection may have opened but failed before a valid HTTP response. TasmoClaw retries transient webclient errors once.',
-'fallback_hint':'Set HTTPS transport to auto or native if this firmware includes USE_TASMOCLAW_HTTPS.',
+'fallback_hint':'Use a local OpenAI-compatible HTTP endpoint or a LAN bridge/proxy if stock webclient cannot reach this HTTPS API.',
 'api_url': tasmoclaw_util.safe_url(cfg['api_url']),
 'payload_bytes': size(payload_s),
 'model': cfg['model'],
 'attempt':attempt,
-'attempts':attempts,
-'native_error':native_missing
+'attempts':attempts
 }
 end
 var body = cl.get_string()
 cl.close()
 tasmoclaw_util.debug('webclient response code=' + str(code) + ' body_bytes=' + str(body == nil ? 0 : size(body)))
 if code < 200 || code >= 300
-return self.http_error('webclient', code, body, native_missing)
+return self.http_error('webclient', code, body)
 end
 if body == nil || size(body) == 0
-return self.empty_response_error('webclient', code, native_missing)
+return self.empty_response_error('webclient', code)
 end
 if size(body) > 24000
 tasmoclaw_util.debug('webclient oversized response bytes=' + str(size(body)))
@@ -379,7 +285,118 @@ except .. as e2,m2
 tasmoclaw_util.debug('webclient close after exception failed: ' + str(e2) + ' ' + str(m2))
 end
 tasmoclaw_util.debug('webclient exception: ' + str(e) + ' ' + str(m))
-return {'ok':false,'transport':'webclient','error':'request failed: '+str(m),'native_error':native_missing}
+return {'ok':false,'transport':'webclient','error':'request failed: '+str(m)}
+end
+end
+def http_url_parts(url)
+var s = str(url)
+var prefix = 'http://'
+if string.find(s, prefix) != 0
+return nil
+end
+var rest = s[size(prefix) ..]
+var slash = string.find(rest, '/')
+var authority = rest
+var path_q = '/'
+if slash != nil && slash >= 0
+authority = rest[0 .. slash - 1]
+path_q = rest[slash ..]
+end
+var host = authority
+var port = 80
+var colon = string.find(authority, ':')
+if colon != nil && colon >= 0
+host = authority[0 .. colon - 1]
+port = int(authority[colon + 1 ..])
+end
+if host == nil || host == ''
+return nil
+end
+return {'host':host,'port':port,'path':path_q}
+end
+def http_body_from_raw(raw)
+var body_start = string.find(raw, '\r\n\r\n')
+if body_start != nil && body_start >= 0
+return raw[body_start + 4 ..]
+end
+body_start = string.find(raw, '\n\n')
+if body_start != nil && body_start >= 0
+return raw[body_start + 2 ..]
+end
+return raw
+end
+def http_status_from_raw(raw)
+try
+var first_end = string.find(raw, '\r\n')
+var first = first_end != nil && first_end >= 0 ? raw[0 .. first_end - 1] : raw
+var parts = string.split(first, ' ')
+if size(parts) >= 2
+return int(parts[1])
+end
+except .. as e,m
+end
+return 0
+end
+def call_chat_tcp_http(cfg, payload_s)
+var u = self.http_url_parts(cfg['api_url'])
+if u == nil
+return {'ok':false,'transport':'tcpclient','status':-1,'error':'tcpclient chat supports plain HTTP only'}
+end
+var cl = nil
+try
+cl = tcpclient()
+if cl.connect(u.find('host'), u.find('port')) != true
+try cl.close() except .. as e0,m0 end
+try cl.deinit() except .. as e1,m1 end
+return {'ok':false,'transport':'tcpclient','status':-1,'error':'tcp connect failed'}
+end
+var req = 'POST ' + u.find('path') + ' HTTP/1.0\r\n'
+req += 'Host: ' + u.find('host') + '\r\n'
+req += 'Content-Type: application/json\r\n'
+req += 'Accept: application/json\r\n'
+req += 'Connection: close\r\n'
+req += 'User-Agent: TasmoClaw/0.1\r\n'
+req += 'Content-Length: ' + str(size(payload_s)) + '\r\n'
+req += '\r\n'
+req += payload_s
+cl.write(req)
+var raw = ''
+var start = tasmota.millis()
+var last = start
+while tasmota.millis() - start < 90000
+var chunk = cl.read()
+if chunk != nil && size(chunk) > 0
+raw += chunk
+last = tasmota.millis()
+if size(raw) > 30000
+break
+end
+elif cl.connected() == false
+break
+elif tasmota.millis() - last > 15000
+break
+end
+tasmota.delay(25)
+end
+try cl.close() except .. as e2,m2 end
+try cl.deinit() except .. as e3,m3 end
+if raw == nil || raw == ''
+return {'ok':false,'transport':'tcpclient','status':-1,'error':'empty TCP HTTP response'}
+end
+var status = self.http_status_from_raw(raw)
+var body = self.http_body_from_raw(raw)
+tasmoclaw_util.debug('tcpclient local chat status=' + str(status) + ' body_bytes=' + str(size(body)))
+if status < 200 || status >= 300
+return self.http_error('tcpclient', status, body)
+end
+var pr = self.parse_response(body)
+pr['transport'] = 'tcpclient'
+pr['status'] = status
+return pr
+except .. as e,m
+try if cl != nil cl.close() end except .. as e4,m4 end
+try if cl != nil cl.deinit() end except .. as e5,m5 end
+return {'ok':false,'transport':'tcpclient','status':-1,'error':'tcp POST failed: '+str(m)}
 end
 end
 def probe_webclient(url)
@@ -432,77 +449,6 @@ out['error'] = 'webclient request failed: '+str(m2)
 return out
 end
 end
-def probe_native_get(url)
-tasmoclaw_util.debug('native probe start url=' + tasmoclaw_util.safe_url(url))
-var headers = tasmoclaw_util.json_encode({
-'Accept':'application/json,text/plain,*/*',
-'Connection':'close',
-'User-Agent':'TasmoClaw/0.1'
-})
-var raw = nil
-var get_error = nil
-if global.contains('idf_https_get')
-try
-raw = global.idf_https_get(url, headers)
-except .. as e_get,m_get
-tasmoclaw_util.debug('native probe idf_https_get failed: ' + str(e_get) + ' ' + str(m_get))
-get_error = str(m_get)
-end
-else
-get_error = 'idf_https_get unavailable'
-end
-if raw == nil
-if global.contains('idf_https_post')
-try
-raw = global.idf_https_post(url, headers, '')
-except .. as e_post,m_post
-tasmoclaw_util.debug('native probe idf_https_post failed: ' + str(e_post) + ' ' + str(m_post))
-return {
-'ok':false,
-'transport':'esp_http_client',
-'native_available':false,
-'url':tasmoclaw_util.safe_url(url),
-'error':'idf_https_post unavailable or failed: '+str(m_post),
-'get_error':get_error
-}
-end
-else
-return {
-'ok':false,
-'transport':'esp_http_client',
-'native_available':false,
-'url':tasmoclaw_util.safe_url(url),
-'error':'idf_https_get/post unavailable',
-'get_error':get_error
-}
-end
-end
-try
-var o = json.load(raw)
-tasmoclaw_util.debug('native probe done url=' + tasmoclaw_util.safe_url(url) + ' ok=' + str(o.find('ok')) + ' status=' + str(o.find('status')) + ' stage=' + str(o.find('stage')) + ' esp_err=' + str(o.find('esp_err')))
-return {
-'ok':o.find('ok') == true,
-'transport':'esp_http_client',
-'native_available':true,
-'url':tasmoclaw_util.safe_url(url),
-'status':o.find('status'),
-'stage':o.find('stage'),
-'esp_err':o.find('esp_err'),
-'error':o.find('error'),
-'body':tasmoclaw_util.preview(o.find('body'), 220)
-}
-except .. as e_json,m_json
-tasmoclaw_util.debug('native probe invalid JSON: ' + str(e_json) + ' ' + str(m_json) + ' raw=' + tasmoclaw_util.preview(raw, 160))
-return {
-'ok':false,
-'transport':'esp_http_client',
-'native_available':true,
-'url':tasmoclaw_util.safe_url(url),
-'error':'native probe returned invalid JSON: '+str(m_json),
-'body':tasmoclaw_util.preview(raw, 220)
-}
-end
-end
 def parse_response(body)
 try
 tasmoclaw_util.debug('llm parse response body_bytes=' + str(body == nil ? 0 : size(body)))
@@ -544,4 +490,5 @@ var tasmoclaw_llm = module("tasmoclaw_llm")
 tasmoclaw_llm.create = def()
 return TasmoClawLLM()
 end
+global.tasmoclaw_llm_mod = tasmoclaw_llm
 return tasmoclaw_llm

@@ -1,12 +1,14 @@
 import persist
 import json
 import path
-import tasmoclaw_util
+import introspect
+import string
+var tasmoclaw_util = introspect.module('tasmoclaw_util')
 class TasmoClawStore
 var config_file, history_file, pending_file, workspace_fallback, last_error
 def init()
 self.config_file = '/tasmoclaw_config.json'
-self.history_file = '/tasmoclaw_history.json'
+self.history_file = '/tasmoclaw_history.md'
 self.pending_file = '/tasmoclaw_pending.json'
 self.workspace_fallback = false
 self.last_error = ''
@@ -19,7 +21,6 @@ return {
 'model':'deepseek-v4-flash',
 'model_flash':'deepseek-v4-flash',
 'model_pro':'deepseek-v4-pro',
-'https_transport':'webclient',
 'api_key':'',
 'temperature':0.2,
 'max_tokens':700,
@@ -32,13 +33,49 @@ return {
 'auto_approve_tools':false,
 'tested_models':[],
 'workspace':'/tasmoclaw/',
+'brave_api_key':'',
+'vision_api_url':'',
+'vision_model':'',
+'vision_api_key':'',
 'system_extra':''
 }
+end
+def agent_file_names()
+return ['AGENTS.md','SOUL.md','IDENTITY.md','USER.md','MEMORY.md']
+end
+def agent_file_path(name)
+var n = name == nil || name == '' ? 'MEMORY.md' : str(name)
+n = string.replace(n, '/', '')
+n = string.replace(n, '\\', '')
+n = string.replace(n, '..', '')
+if string.find(n, '.') == nil
+n += '.md'
+end
+var lower = string.tolower(n)
+for f:self.agent_file_names()
+if lower == string.tolower(f)
+return self.workspace_fallback ? '/' + f : '/tasmoclaw/' + f
+end
+end
+return nil
+end
+def default_agent_file(name)
+if name == 'AGENTS.md'
+return '# AGENTS.md\n\n- Use tools before guessing when the request depends on live Tasmota state, files, rules, sensors, power, web search, or command output.\n- Prefer structured TasmoClaw tools over raw commands.\n- Keep workflows short: inspect, act, verify, summarize.\n- Finish requested multi-step work when possible.\n- Store durable facts in MEMORY.md and user preferences in USER.md.\n'
+elif name == 'SOUL.md'
+return '# SOUL.md\n\nBe concise, practical, friendly, and lightly playful.\n'
+elif name == 'IDENTITY.md'
+return '# IDENTITY.md\n\nName: TasmoClaw\nEmoji: \xF0\x9F\xA6\x9E\nRole: Embedded Tasmota assistant\n'
+elif name == 'USER.md'
+return '# USER.md\n\nAdd stable user preferences, environment notes, and project context here.\n'
+elif name == 'MEMORY.md'
+return '# MEMORY.md\n\nKeep this file very small. Curate stable facts only; rewrite or remove stale notes instead of growing the file.\n\nAdd durable project facts and important decisions here.\n'
+end
+return ''
 end
 def read_file(file)
 try
 if path.exists(file) != true
-tasmoclaw_util.debug('store read missing file=' + str(file))
 return nil
 end
 var f = open(file, 'r')
@@ -158,6 +195,111 @@ end
 end
 return nil
 end
+def strip_blank_lines(s)
+if s == nil
+return ''
+end
+var out = str(s)
+while size(out) > 0 && out[0..0] == '\n'
+out = out[1..]
+end
+while size(out) > 0 && out[size(out)-1..size(out)-1] == '\n'
+if size(out) == 1
+out = ''
+else
+out = out[0..size(out)-2]
+end
+end
+return out
+end
+def history_to_markdown(h)
+var out = '# TasmoClaw History\n\n'
+out += '<!-- Human-readable chat transcript. TasmoClaw parses sections that start with "## role". -->\n\n'
+if h == nil
+return out
+end
+for m:h
+var role = self.safe_find(m, 'role')
+var content = self.safe_find(m, 'content')
+if role == nil role = 'assistant' end
+if content == nil content = '' end
+out += '## ' + str(role) + '\n\n'
+out += str(content) + '\n\n---\n\n'
+end
+return out
+end
+def markdown_to_history(raw)
+var history = []
+if raw == nil || size(raw) == 0
+return history
+end
+var parts = string.split(str(raw), '\n## ')
+for i:0..size(parts)-1
+var part = parts[i]
+if i == 0
+if string.find(part, '## ') == 0
+part = part[3..]
+else
+continue
+end
+end
+var first_nl = string.find(part, '\n')
+if first_nl == nil || first_nl < 0
+continue
+end
+var role = part[0..first_nl-1]
+var body = part[first_nl+1..]
+var sep = string.find(body, '\n\n---')
+if sep != nil && sep >= 0
+body = body[0..sep-1]
+end
+body = self.strip_blank_lines(body)
+if role == 'user' || role == 'assistant' || role == 'tool' || role == 'approval'
+history.push({'role':role,'content':body})
+end
+end
+return history
+end
+def ensure_agent_files()
+for name:self.agent_file_names()
+var p = self.agent_file_path(name)
+if p != nil
+try
+if path.exists(p) != true
+self.write_file(p, self.default_agent_file(name))
+end
+except .. as e,m
+tasmoclaw_util.debug('store ensure_agent_files failed file=' + str(name) + ' error=' + str(m))
+end
+end
+end
+end
+def agent_context(max_bytes)
+if max_bytes == nil || max_bytes < 1
+max_bytes = 1800
+end
+var out = ''
+for name:self.agent_file_names()
+if size(out) >= max_bytes
+break
+end
+var p = self.agent_file_path(name)
+if p != nil
+var raw = self.read_file(p)
+if raw != nil && size(raw) > 0
+var header = '\n\n### ' + name + '\n'
+var remaining = max_bytes - size(out) - size(header)
+if remaining > 80
+out += header + tasmoclaw_util.preview(raw, remaining)
+end
+end
+end
+end
+if out == ''
+return ''
+end
+return 'TasmoClaw flash agent files:' + out
+end
 def load_config()
 tasmoclaw_util.debug('store load_config start')
 var cfg = self.default_config()
@@ -170,6 +312,7 @@ for k:obj.keys()
 cfg[k]=obj[k]
 end
 loaded = true
+self.persist_delete(self.config_file)
 end
 except .. as e,m
 self.last_error = 'config parse failed: ' + str(m)
@@ -189,7 +332,7 @@ except .. as e2,m2
 tasmoclaw_util.debug('store config persist fallback failed: ' + str(m2))
 end
 end
-tasmoclaw_util.debug('store load_config done transport=' + str(cfg.find('https_transport')) + ' model=' + str(cfg.find('model')))
+tasmoclaw_util.debug('store load_config done model=' + str(cfg.find('model')))
 return cfg
 end
 def save_config(cfg)
@@ -200,8 +343,6 @@ if p['ok']
 tasmoclaw_util.debug('store save_config used persist fallback warning=' + str(r['error']))
 return {'ok':true,'fallback':'persist','warning':r['error']}
 end
-else
-self.persist_write(self.config_file, tasmoclaw_util.json_encode(cfg))
 end
 return r
 end
@@ -211,17 +352,35 @@ try
 var raw = self.read_file(self.history_file)
 if raw != nil
 tried_file = true
-var h = json.load(raw)
-var hl = self.history_list(h)
-if hl != nil
-tasmoclaw_util.debug('store load_history count=' + str(size(hl)))
-return hl
+var h = self.markdown_to_history(raw)
+if h != nil
+tasmoclaw_util.debug('store load_history markdown count=' + str(size(h)))
+self.persist_delete(self.history_file)
+return h
 end
-tasmoclaw_util.debug('store load_history ignored non-list history file')
 end
 except .. as e,m
 self.last_error = 'history parse failed: ' + str(m)
 tasmoclaw_util.debug('store history parse failed; trying persist error=' + str(m))
+end
+if !tried_file
+try
+var raw_legacy = self.read_file('/tasmoclaw_history.json')
+if raw_legacy != nil
+tried_file = true
+var h_legacy = json.load(raw_legacy)
+var hl_legacy = self.history_list(h_legacy)
+if hl_legacy != nil
+tasmoclaw_util.debug('store history migrated from json count=' + str(size(hl_legacy)))
+self.write_file(self.history_file, self.history_to_markdown(hl_legacy))
+self.remove_file('/tasmoclaw_history.json')
+self.persist_delete(self.history_file)
+return hl_legacy
+end
+end
+except .. as e_legacy,m_legacy
+tasmoclaw_util.debug('store legacy history migration failed: ' + str(m_legacy))
+end
 end
 if !tried_file
 try
@@ -231,6 +390,8 @@ var h2 = json.load(raw2)
 var hl2 = self.history_list(h2)
 if hl2 != nil
 tasmoclaw_util.debug('store history loaded from persist count=' + str(size(hl2)))
+self.write_file(self.history_file, self.history_to_markdown(hl2))
+self.persist_delete(self.history_file)
 return hl2
 end
 tasmoclaw_util.debug('store history persist ignored non-list value')
@@ -243,16 +404,9 @@ tasmoclaw_util.debug('store load_history default empty')
 return []
 end
 def save_history(h)
-var r = self.write_file(self.history_file, tasmoclaw_util.json_encode(h))
-if !r['ok']
-var p = self.persist_write(self.history_file, tasmoclaw_util.json_encode(h))
-if p['ok']
-tasmoclaw_util.debug('store save_history used persist fallback warning=' + str(r['error']))
-return {'ok':true,'fallback':'persist','warning':r['error']}
-end
-else
-self.persist_write(self.history_file, tasmoclaw_util.json_encode(h))
-end
+var r = self.write_file(self.history_file, self.history_to_markdown(h))
+self.remove_file('/tasmoclaw_history.json')
+self.persist_delete(self.history_file)
 return r
 end
 def load_pending()
@@ -264,9 +418,11 @@ tried_file = true
 var p = json.load(raw)
 if p == nil || self.safe_find(p, 'tool') == nil
 tasmoclaw_util.debug('store load_pending ignored non-map pending')
+self.persist_delete(self.pending_file)
 return nil
 end
 tasmoclaw_util.debug('store load_pending found tool=' + str(self.safe_find(p, 'tool')))
+self.persist_delete(self.pending_file)
 return p
 end
 except .. as e,m
@@ -280,6 +436,8 @@ if raw2 != nil
 var p2 = json.load(raw2)
 if p2 != nil && self.safe_find(p2, 'tool') != nil
 tasmoclaw_util.debug('store pending loaded from persist')
+self.write_file(self.pending_file, tasmoclaw_util.json_encode(p2))
+self.persist_delete(self.pending_file)
 return p2
 end
 tasmoclaw_util.debug('store pending persist ignored non-map value')
@@ -293,27 +451,11 @@ end
 def save_pending(p)
 if p == nil
 var r = self.remove_file(self.pending_file)
-if !r['ok']
-var pdel = self.persist_delete(self.pending_file)
-if pdel['ok']
-tasmoclaw_util.debug('store save_pending remove used persist fallback warning=' + str(r['error']))
-return {'ok':true,'fallback':'persist','warning':r['error']}
-end
-else
 self.persist_delete(self.pending_file)
-end
 return r
 else
 var r2 = self.write_file(self.pending_file, tasmoclaw_util.json_encode(p))
-if !r2['ok']
-var pw = self.persist_write(self.pending_file, tasmoclaw_util.json_encode(p))
-if pw['ok']
-tasmoclaw_util.debug('store save_pending used persist fallback warning=' + str(r2['error']))
-return {'ok':true,'fallback':'persist','warning':r2['error']}
-end
-else
-self.persist_write(self.pending_file, tasmoclaw_util.json_encode(p))
-end
+self.persist_delete(self.pending_file)
 return r2
 end
 end
@@ -330,12 +472,20 @@ end
 if path.exists('/tasmoclaw/logs') != true
 path.mkdir('/tasmoclaw/logs')
 end
+if path.exists('/tasmoclaw/scripts') != true
+path.mkdir('/tasmoclaw/scripts')
+end
+if path.exists('/tasmoclaw/memory') != true
+path.mkdir('/tasmoclaw/memory')
+end
+self.ensure_agent_files()
 tasmoclaw_util.debug('store ensure_workspace done fallback=false')
 return {'ok':true,'fallback':false}
 except .. as e,m
 self.workspace_fallback = true
 self.last_error = 'workspace mkdir failed: ' + str(m)
 tasmoclaw_util.debug('store ensure_workspace failed: ' + str(m))
+self.ensure_agent_files()
 try
 tasmota.log('TasmoClaw: ' + self.last_error, 2)
 except .. as e2,m2
@@ -348,4 +498,5 @@ var tasmoclaw_store = module("tasmoclaw_store")
 tasmoclaw_store.create = def()
 return TasmoClawStore()
 end
+global.tasmoclaw_store_mod = tasmoclaw_store
 return tasmoclaw_store
