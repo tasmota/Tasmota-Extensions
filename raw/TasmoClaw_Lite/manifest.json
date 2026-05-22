@@ -1,0 +1,8 @@
+{
+  "name": "TasmoClaw Lite",
+  "version": "0x1A051500",
+  "description": "Stock ESP32-friendly TasmoClaw AI chat with nice UI, read tools, and approval-gated safe Tasmota actions",
+  "author": "Frederick Blais",
+  "min_tasmota": "0x0F040000",
+  "features": "berry,webserver"
+}

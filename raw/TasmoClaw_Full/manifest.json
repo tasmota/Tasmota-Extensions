@@ -1,0 +1,8 @@
+{
+  "name": "TasmoClaw Full",
+  "version": "0x1A051500",
+  "description": "Full TasmoClaw AI chat for PSRAM devices with broad Tasmota tools, Berry programming, filesystem, and advanced workflows",
+  "author": "Frederick Blais",
+  "min_tasmota": "0x0F040000",
+  "features": "berry,webserver,psram"
+}
