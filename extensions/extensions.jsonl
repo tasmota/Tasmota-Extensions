@@ -1,6 +1,6 @@
 {"name":"Daikin AC WiFi","file":"Daikin_AC.tapp","version":"0x1A080601","description":"Support for Daikin WiFi-enabled air conditioners (BRP069/BRP072-style adapters). Optional Matter integration.","author":"Christian Baars"}
 {"name":"Devices Online","file":"Devices_Online.tapp","version":"0x1A040900","description":"Display devices online info","author":"Theo Arends"}
-{"name":"LVGL Panel","file":"LVGL_Panel.tapp","version":"0x1A0A1500","description":"Realtime mirror of the LVGL display in browser","author":"Stephan Hadinger & Milko Daskalov"}
+{"name":"LVGL Panel","file":"LVGL_Panel.tapp","version":"0x1A0A1501","description":"Realtime mirror of the LVGL display in browser","author":"Stephan Hadinger & Milko Daskalov"}
 {"name":"Leds Panel","file":"Leds_Panel.tapp","version":"0x19090100","description":"Realtime display of the WS2812 leds in browser","author":"Stephan Hadinger"}
 {"name":"LoRaWan Decoders","file":"LoRaWan_Decoders.tapp","version":"0x1A081E00","description":"Decode LoRaWan devices","author":"Theo Arends"}
 {"name":"Partition Wizard","file":"Partition_Wizard.tapp","version":"0x19090100","description":"Wizard for resizing partitions and converting to safeboot layout","author":"Stephan Hadinger"}
