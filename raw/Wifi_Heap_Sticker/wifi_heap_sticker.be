@@ -11,6 +11,7 @@ class Wifi_Heap_Sticker
   static var HTTP_HEAD_STYLE_WIFI =
     "<style>"
     ".wifi{width:18px;height:12px;position:relative}"
+    ".wifi[title]:hover::after{left:0;transform:none;}"
     ".arc{padding:0;position:absolute;border:2px solid transparent;border-radius:50%;border-top-color:var(--c_txt)}"
     ".a0{width:2px;height:3px;top:9px;left:8px}"
     ".a1{width:6px;height:6px;top:6px;left:6px}"
@@ -36,9 +37,10 @@ class Wifi_Heap_Sticker
     if tasmota.wifi('up')
       webserver.content_send(self.HTTP_HEAD_STYLE_WIFI)
       var rssi = tasmota.wifi('rssi')
-      webserver.content_send(format("<div class='wifi' title='%s: RSSI %d%% (%d dBm)'><div class='arc a3%s'></div><div class='arc a2%s'></div><div class='arc a1%s'></div><div class='arc a0'></div></div>",
+      webserver.content_send(format("<div class='wifi' title='SSID: %s\nRSSI %d%% (%d dBm)\nAP: %s'><div class='arc a3%s'></div><div class='arc a2%s'></div><div class='arc a1%s'></div><div class='arc a0'></div></div>",
                                     tasmota.wifi('ssid'),
                                     tasmota.wifi('quality'), rssi,
+                                    tasmota.wifi('bssid'),
                                     rssi < -55 ? " o30" : "",
                                     rssi < -70 ? " o30" : "",
                                     rssi < -85 ? " o30" : ""))
